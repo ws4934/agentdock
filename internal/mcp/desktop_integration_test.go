@@ -26,7 +26,7 @@ func TestNativeDesktopMCPImage(t *testing.T) {
 	var result *mcpsdk.CallToolResult
 	for attempt := 0; attempt < 3; attempt++ {
 		var err error
-		result, err = harness.session.CallTool(t.Context(), &mcpsdk.CallToolParams{Name: desktop.ToolSnapshot, Arguments: map[string]any{"max_dimension": 1024}})
+		result, err = harness.session.CallTool(t.Context(), &mcpsdk.CallToolParams{Name: desktop.ToolSnapshot, Arguments: map[string]any{"mode": "foreground", "max_dimension": 1024}})
 		if err != nil {
 			t.Fatal(err)
 		}

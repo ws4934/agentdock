@@ -88,10 +88,11 @@ char *ad_state(void) {
    [applications addObject:@{@"pid":@(pid),@"name":app.localizedName?:@"",@"bundle_id":app.bundleIdentifier?:@""}];
    if(applications.count>=256)break;
   }
-  return ad_json(@{@"frontmost_pid":@(ad_frontmost()),@"displays":displays,@"windows":windows,@"applications":applications});
+  CGEventRef cursorEvent=CGEventCreate(NULL);CGPoint cursor=cursorEvent?CGEventGetLocation(cursorEvent):CGPointZero;if(cursorEvent)CFRelease(cursorEvent);
+  return ad_json(@{@"cursor":@{@"x":@(cursor.x),@"y":@(cursor.y)},@"frontmost_pid":@(ad_frontmost()),@"displays":displays,@"windows":windows,@"applications":applications});
  }
 }
-int ad_capture(uint32_t display,int dimension,int timeout_ms,unsigned char **out,size_t *size,int *width,int *height) {
+static int ad_capture_target(uint32_t display,uint32_t window,int pid,int dimension,int timeout_ms,unsigned char **out,size_t *size,int *width,int *height) {
  @autoreleasepool {
   if (@available(macOS 14.0,*)) {
    if(!CGPreflightScreenCaptureAccess())return 5;
@@ -101,15 +102,27 @@ int ad_capture(uint32_t display,int dimension,int timeout_ms,unsigned char **out
    // ARC 保留异步回调的所有状态；超时不释放仍可能被回调访问的内存。
    [SCShareableContent getShareableContentExcludingDesktopWindows:NO onScreenWindowsOnly:YES completionHandler:^(SCShareableContent *content,NSError *error) {
     if(error||!content){dispatch_semaphore_signal(done);return;}
-    SCDisplay *selected=nil;
-    for(SCDisplay *candidate in content.displays)if(candidate.displayID==display){selected=candidate;break;}
-    if(!selected){dispatch_semaphore_signal(done);return;}
-    SCContentFilter *filter=[[SCContentFilter alloc] initWithDisplay:selected excludingWindows:@[]];
+    SCContentFilter *filter=nil;double sourceWidth=0,sourceHeight=0;
+    if(window) {
+     SCWindow *selected=nil;
+     for(SCWindow *candidate in content.windows)if(candidate.windowID==window&&candidate.owningApplication.processID==pid){selected=candidate;break;}
+     if(!selected){dispatch_semaphore_signal(done);return;}
+     filter=[[SCContentFilter alloc] initWithDesktopIndependentWindow:selected];
+     sourceWidth=selected.frame.size.width;sourceHeight=selected.frame.size.height;
+    } else {
+     SCDisplay *selected=nil;
+     for(SCDisplay *candidate in content.displays)if(candidate.displayID==display){selected=candidate;break;}
+     if(!selected){dispatch_semaphore_signal(done);return;}
+     filter=[[SCContentFilter alloc] initWithDisplay:selected excludingWindows:@[]];
+     sourceWidth=selected.width;sourceHeight=selected.height;
+    }
+    if(sourceWidth<=0||sourceHeight<=0){dispatch_semaphore_signal(done);return;}
     SCStreamConfiguration *configuration=[[SCStreamConfiguration alloc] init];
-    double ratio=fmin(1.0,(double)dimension/fmax(selected.width,selected.height));
-    configuration.width=MAX(1,(size_t)llround(selected.width*ratio));
-    configuration.height=MAX(1,(size_t)llround(selected.height*ratio));
-    configuration.showsCursor=YES;
+    double ratio=fmin(1.0,(double)dimension/fmax(sourceWidth,sourceHeight));
+    configuration.width=MAX(1,(size_t)llround(sourceWidth*ratio));
+    configuration.height=MAX(1,(size_t)llround(sourceHeight*ratio));
+    configuration.showsCursor=window?NO:YES;
+    configuration.ignoreShadowsSingleWindow=YES;
     [SCScreenshotManager captureImageWithFilter:filter configuration:configuration completionHandler:^(CGImageRef image,NSError *captureError) {
      if(image&&!captureError) {
       NSMutableData *data=[NSMutableData data];
@@ -132,6 +145,12 @@ int ad_capture(uint32_t display,int dimension,int timeout_ms,unsigned char **out
   }
   return 6;
  }
+}
+int ad_capture(uint32_t display,int dimension,int timeout_ms,unsigned char **out,size_t *size,int *width,int *height) {
+ return ad_capture_target(display,0,0,dimension,timeout_ms,out,size,width,height);
+}
+int ad_capture_window(uint32_t window,int pid,int dimension,int timeout_ms,unsigned char **out,size_t *size,int *width,int *height) {
+ return ad_capture_target(0,window,pid,dimension,timeout_ms,out,size,width,height);
 }
 static id ad_attribute(AXUIElementRef element,CFStringRef name) {
  CFTypeRef value=NULL;
@@ -159,8 +178,10 @@ static NSDictionary *ad_element(AXUIElementRef element,NSArray *path) {
  CFArrayRef names=NULL;BOOL pressable=NO;
  if(AXUIElementCopyActionNames(element,&names)==kAXErrorSuccess&&names){pressable=CFArrayContainsValue(names,CFRangeMake(0,CFArrayGetCount(names)),kAXPressAction);CFRelease(names);}
  id enabled=ad_attribute(element,kAXEnabledAttribute);
+ Boolean settable=false;
+ if(!secure&&([role isEqualToString:(__bridge NSString *)kAXTextFieldRole]||[role isEqualToString:(__bridge NSString *)kAXTextAreaRole]))AXUIElementIsAttributeSettable(element,kAXValueAttribute,&settable);
  // 从不读取 AXValue、选中文本或密码；安全文本框的标签也隐藏。
- return @{@"role":role,@"title":secure?@"[redacted]":ad_label(element,kAXTitleAttribute),@"description":secure?@"":ad_label(element,kAXDescriptionAttribute),@"bounds":ad_rect(ad_bounds(element)),@"enabled":([enabled isKindOfClass:NSNumber.class]&&[enabled boolValue])?@YES:@NO,@"pressable":(pressable&&!secure)?@YES:@NO,@"path":path};
+ return @{@"role":role,@"title":secure?@"[redacted]":ad_label(element,kAXTitleAttribute),@"description":secure?@"":ad_label(element,kAXDescriptionAttribute),@"bounds":ad_rect(ad_bounds(element)),@"enabled":([enabled isKindOfClass:NSNumber.class]&&[enabled boolValue])?@YES:@NO,@"pressable":(pressable&&!secure)?@YES:@NO,@"value_settable":settable?@YES:@NO,@"path":path};
 }
 static void ad_walk(AXUIElementRef node,NSArray *path,NSMutableArray *output,CFMutableSetRef seen,int nodes,int depth,CFAbsoluteTime deadline,BOOL *truncated) {
  if(output.count>=(NSUInteger)nodes||CFAbsoluteTimeGetCurrent()>deadline){*truncated=YES;return;}
@@ -277,3 +298,5 @@ static int ad_keyboard(int pid,uint16_t key,uint64_t flags,const uint16_t *text,
 }
 int ad_key(int pid,uint16_t key,uint64_t flags) {@autoreleasepool{return ad_keyboard(pid,key,flags,NULL,0);}}
 int ad_text(int pid,const uint16_t *text,size_t length) {@autoreleasepool{return ad_keyboard(pid,0,0,text,length);}}
+
+#include "native_window_impl.h"

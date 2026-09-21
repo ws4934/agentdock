@@ -243,4 +243,6 @@ Apache License 2.0. See [LICENSE](./LICENSE).
 
 An opt-in native desktop capability for macOS 14+: screenshots, displays/windows, Accessibility elements, pointer actions, dragging, scrolling, shortcuts, and Unicode typing. The implementation uses Go plus a thin system API bridge, not a Skill, Python, AppleScript, or a Codex MCP dependency. Enable it in the Mac advanced settings or set `AGENTDOCK_DESKTOP_ENABLED=true`; macOS builds require CGO.
 
+The default observation only discovers windows. Select a window for background capture and directed input; foreground takeover requires explicit `mode: foreground` and is never an automatic fallback. Background pointer routing has an optional private macOS coordinate bridge and requires revalidation after system upgrades; this is not a virtual desktop.
+
 See [desktop control, permissions, and verification](docs/macos-computer-use.md).

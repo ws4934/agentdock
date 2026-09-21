@@ -31,7 +31,7 @@ func nativeError(code C.int) error {
 	if code == 0 {
 		return nil
 	}
-	messages := map[int]string{1: "Native allocation or system call failed", 2: "Foreground application changed before input", 3: "Secure Input is active", 4: "Accessibility element changed, is unavailable, or rejects AXPress", 5: "ScreenCaptureKit capture failed or timed out", 6: "macOS 14+ is required", 7: "Accessibility permission is missing"}
+	messages := map[int]string{1: "Native allocation or system call failed", 2: "Foreground application changed before input", 3: "Secure Input is active", 4: "Accessibility element changed, is unavailable, or rejects AXPress", 5: "ScreenCaptureKit capture failed or timed out", 6: "macOS 14+ is required", 7: "Accessibility permission is missing", 8: "Background window disappeared or changed identity/geometry", 9: "Target app is now in the foreground; background input refused", 10: "Target window is not the app focused window; refusing ambiguous keyboard routing", 11: "Target AX window is unavailable or ambiguous", 12: "Background pointer requires the optional macOS window-location bridge; it is unavailable, and foreground fallback is forbidden", 13: "The current keyboard layout cannot translate this shortcut key", 14: "Background menu shortcut is ambiguous or traversal exceeded its bounds; no key was sent", 15: "The matching background menu command is disabled; no key was sent and the application was not activated"}
 	message := messages[int(code)]
 	if message == "" {
 		message = fmt.Sprintf("Native desktop error %d", int(code))
@@ -79,6 +79,12 @@ func (nativeBackend) Tree(ctx context.Context, pid, nodes, depth int) (Tree, err
 	return tree, err
 }
 func (nativeBackend) Capture(ctx context.Context, display Display, dimension int) (Capture, error) {
+	return nativeCapture(ctx, display.ID, 0, dimension)
+}
+func (nativeBackend) CaptureWindow(ctx context.Context, window Window, dimension int) (Capture, error) {
+	return nativeCapture(ctx, window.ID, window.PID, dimension)
+}
+func nativeCapture(ctx context.Context, id uint32, pid int, dimension int) (Capture, error) {
 	if err := ctx.Err(); err != nil {
 		return Capture{}, err
 	}
@@ -92,7 +98,12 @@ func (nativeBackend) Capture(ctx context.Context, display Display, dimension int
 	var data *C.uchar
 	var size C.size_t
 	var width, height C.int
-	code := C.ad_capture(C.uint32_t(display.ID), C.int(dimension), C.int(max(1, timeout.Milliseconds())), &data, &size, &width, &height)
+	var code C.int
+	if pid > 0 {
+		code = C.ad_capture_window(C.uint32_t(id), C.int(pid), C.int(dimension), C.int(max(1, timeout.Milliseconds())), &data, &size, &width, &height)
+	} else {
+		code = C.ad_capture(C.uint32_t(id), C.int(dimension), C.int(max(1, timeout.Milliseconds())), &data, &size, &width, &height)
+	}
 	if data != nil {
 		defer C.free(unsafe.Pointer(data))
 	}

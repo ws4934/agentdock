@@ -18,7 +18,7 @@ var outputContractCoverageInventory = map[string]outputContractCoverageEntry{
 	"desktop_status":           {Variants: []string{"success"}},
 	"desktop_permissions":      {Variants: []string{"success"}},
 	"desktop_snapshot":         {Variants: []string{"success"}},
-	"desktop_act":              {Variants: []string{"activate", "click", "move", "drag", "scroll", "key", "type"}},
+	"desktop_act":              {Variants: []string{"activate", "click", "move", "drag", "scroll", "key", "type", "set_value"}},
 	"agentdock_context":        {Variants: []string{"success"}},
 	"read_file":                {Variants: []string{"success"}},
 	"list_dir":                 {Variants: []string{"success"}},

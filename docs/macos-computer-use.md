@@ -2,7 +2,7 @@
 
 AgentDock 内置的 macOS 桌面能力供连接的 AI 客户端使用：**观察桌面 → 客户端理解和决策 → 执行一个动作 → 再观察验证**。这是独立实现的 Computer Use 工具层，不调用 Codex 插件，也不内置模型或自主规划器。
 
-核心实现为 Go；`internal/tool/desktop/native_darwin.m` 仅作为 macOS SDK 的 cgo 桥接。运行不需要 Python、AppleScript、第三方桌面 MCP、Skill 或临时脚本。现有 Swift 菜单栏应用只新增配置开关。
+核心实现为 Go；`internal/tool/desktop/native_darwin.m` 作为原生 cgo 桥接。默认以后台窗口为目标，不激活目标应用，不接管全局鼠标。后台指针使用一个可检测的非公开系统接口，边界见下文。运行不需要 Python、AppleScript、第三方桌面 MCP、Skill 或临时脚本。现有 Swift 菜单栏应用只新增配置开关。
 
 ## 启用
 
@@ -39,13 +39,53 @@ AGENTDOCK_DESKTOP_ENABLED=true ./bin/agentdock --stdio
 | --- | --- | --- |
 | `desktop_status` | 查询支持状态、启用开关、屏幕录制/辅助功能/Secure Input 状态 | 否，不触发授权 |
 | `desktop_permissions` | 经用户同意请求指定系统权限 | 可能显示系统弹窗 |
-| `desktop_snapshot` | 截图、显示器/窗口/应用信息，可选 Accessibility 树 | 否 |
-| `desktop_act` | 激活、点击、移动、拖拽、滚动、快捷键、Unicode 输入 | 是 |
+| `desktop_snapshot` | 默认只列出窗口；选择窗口后截图和可选 AX 树；显式前台观察 | 否 |
+| `desktop_act` | 对快照绑定目标点击、移动、拖拽、滚动、按键、输入或 AX 全量文本替换；激活仅限显式前台模式 | 是 |
 
-### 观察
+## 后台窗口优先的工作流
+
+`desktop_snapshot` 的默认模式是 `background`。先无参数调用，返回 `state.windows`、PID、显示器等元数据；此时 `observation_only:true`，不截图、不读 AX，而且**不能拿发现快照去发送输入**。不要把默认模式误认为自动操作当前前台窗口。
+
+从实际返回的窗口中选择目标，再调用（示例 ID 必须替换成实际值）：
 
 ```json
-{"accessibility":true,"max_dimension":1568,"max_nodes":200,"max_depth":8}
+{"window_id":123,"pid":456,"accessibility":true,"max_dimension":1568}
+```
+
+`pid` 可省略；提供时用于核对窗口所有者。默认返回目标窗口 JPEG，`screenshot:false` 可关闭图像。截图使用 ScreenCaptureKit 的独立窗口过滤器，目标被其他窗口覆盖时仍截取目标内容，不截取覆盖它的应用，也不显示真实鼠标。窗口最小化、关闭、不可见空间或系统无法提供目标时会失败；不会擅自恢复、移动或激活它。AX 树只从匹配的窗口开始，不遍历整台桌面。
+
+每个动作前重新获取窗口快照，使用新 `snapshot_id`。动作继承快照的模式与目标，调用者不能在 `desktop_act` 中偷偷切换 PID、窗口或前后台模式。背景模式会核对窗口 ID、PID、几何和显示器；目标应用成为用户前台应用时返回 `TARGET_IN_USE`，让用户优先操作。
+
+```json
+{"action":"click","snapshot_id":"<最新ID>","element_id":"e4"}
+{"action":"click","snapshot_id":"<最新ID>","space":"image","point":{"x":240,"y":180}}
+{"action":"set_value","snapshot_id":"<最新ID>","element_id":"e7","text":"后台填写文本"}
+{"action":"set_value","snapshot_id":"<最新ID>","element_id":"e7","text":""}
+{"action":"type","snapshot_id":"<最新ID>","text":"你好 🚀"}
+{"action":"key","snapshot_id":"<最新ID>","key":"a","modifiers":["command"]}
+{"action":"scroll","snapshot_id":"<最新ID>","space":"image","point":{"x":200,"y":180},"delta_y":-200}
+```
+
+`set_value` 是**替换完整文本值**（空字符串表示清空），不是模拟逐字输入；要求元素 `value_settable:true`，仅允许非安全文本框/文本区域。应用可能不会为 AX 赋值发送与打字相同的业务通知，因此仍须观察验证。它不读取原值或剪贴板。
+
+`type`/`key` 要求绑定窗口与该应用自己的 AX focused window 一致，否则拒绝，避免输入跑到同一应用的另一窗口。Command 快捷键优先在有界的只读 AX 菜单遍历中匹配键码/字符和修饰键，唯一匹配且已启用时执行一次 AXPress；菜单被应用禁用、发现歧义或遍历不完整即拒绝。后台 AppKit 可能禁用依赖 key window 的命令（例如全选），不能把它当作可用快捷键或擅自激活应用。没有菜单匹配时才使用定向键盘事件，不会在菜单操作失败后追加一次按键。文字输入和非菜单按键直接投递给目标进程。不会为通过检查而修改系统焦点。不同应用对后台快捷键、IME、菜单和画布的支持可能不同；返回 `event_dispatched` 并不能证明控件采纳了事件。
+
+后台坐标只允许落在绑定窗口内。`space:image` 是该窗口图片像素，按 `image.screen_bounds` 换算。滚动必须带 `point`，绝不读取真实鼠标位置作为滚动目标；`move` 只向应用发送定向移动事件，不挪动全局指针。拖拽结束和取消清理仍绑定原 PID/窗口。
+
+### 原生实现与兼容边界
+
+后台 AXPress/AXSetValue 和窗口截图使用公开 API。定向鼠标使用 `NSEvent` 绑定窗口编号，通过 `CGEventPostToPid` 直接投递，不走全局 HID/session 输入流。macOS 对远端窗口事件的坐标需要非公开的 `CGEventSetWindowLocation`：本实现将动态符号查询限制为单一桥接入口，不注入其他进程、不修改系统权限，也不使用私有激活协议。
+
+`desktop_status.background_pointer` 返回 `available`、`requires_private_api:true`、符号名称和稳定性说明。符号缺失时后台指针明确失败，AX 语义操作仍可用，**绝不回退到全局点击或激活应用**。符号存在只代表接口可调用，并非第三方应用兼容保证；每次 macOS 升级、签名或原生构建变化都应重新运行双应用验收。这项能力不是第二个 WindowServer、虚拟桌面或虚拟机。
+
+第三方控件可能拒绝后台首次点击（AppKit 的 `acceptsFirstMouse:`），或依赖真实系统按键/鼠标状态；不能声称任意画布、游戏和 IME 都兼容。实现不会偷偷附加 Command 修饰键改变点击语义。验收中的自定义画布明确声明接受后台点击，用来验证拖拽投递，而不是证明所有画布都支持。
+
+后台模式不能禁止目标应用自己弹窗、激活、显示菜单或在业务逻辑中影响系统。检测到它变为前台后会报告干扰并停止，而不是抢回原焦点。浏览器任务优先使用已有隔离浏览器会话；需要完整环境隔离的通用桌面任务应使用独立桌面环境。
+
+### 前台观察（显式接管）
+
+```json
+{"mode":"foreground","accessibility":true,"max_dimension":1568,"max_nodes":200,"max_depth":8}
 ```
 
 将上述参数传给 `desktop_snapshot`。截图默认开启，直接返回标准 MCP JPEG image content，并附带文本和结构化坐标元数据；无需再调用 `view_image`。不需要图像时设置 `screenshot:false`。AX 树默认关闭，需要时显式开启。
@@ -84,9 +124,9 @@ AX 中可点击的控件优先按 `element_id` 操作：
 
 元素 ID 只在对应快照中有效。Go 层不公开原生 AX 地址；原生调用前会重新解析并核验元素角色、标题、描述、位置、启用状态和 AXPress 能力。不支持 AX 的画布可以使用截图坐标操作。元素点击不接受鼠标按钮、修饰键或多击参数。
 
-### 其他动作
+### 前台模式的其他动作
 
-以下是分别传给 `desktop_act` 的示例。**每次动作前必须获取新的 `snapshot_id`，不能连续重用示例中的 ID。**
+以下示例必须使用 `mode:foreground` 获取的快照。该模式会使用真实鼠标和前台焦点，仅在用户明确同意接管时使用；后台失败不构成切换授权。以下是分别传给 `desktop_act` 的示例。**每次动作前必须获取新的 `snapshot_id`，不能连续重用示例中的 ID。**
 
 ```json
 {"action":"activate","snapshot_id":"<最新ID>","pid":1234}
@@ -105,7 +145,7 @@ AX 中可点击的控件优先按 `element_id` 操作：
 
 ## 安全边界与错误恢复
 
-- 输入前检查权限、快照时效、前台应用、最前窗口及显示器几何信息。目标改变时拒绝输入；本机输入操作在一个 AgentDock 进程内串行执行。不要同时启动多个桌面控制进程或与人抢占桌面。
+- 输入前检查权限、快照时效及模式对应的目标。前台模式核验前台应用/最前窗口；后台模式核验绑定窗口且拒绝用户正在使用的应用。一个 AgentDock 进程内串行执行；不要启动多个互相争抢同一目标的桌面控制进程。
 - 拖拽的抬起事件在独立的有界清理上下文执行。取消请求、服务关闭或中途错误都会尝试释放按钮。服务关闭会取消未完成动作并等待清理结束。
 - 原生图像只通过本次响应返回，不自动写磁盘、发布 Artifact 或生成公开下载 URL。AX 不读取 Value、选中文本和密码字段内容，并隐藏安全文本控件标签。**图像仍可能包含屏幕上可见的敏感内容，不提供自动图像脱敏**；客户端也可能自行保存响应。
 - 动作审计日志只记录类型、目标 PID、耗时和结果，不记录正文、按键内容、窗口标题、AX 树或图像。
@@ -115,7 +155,9 @@ AX 中可点击的控件优先按 `element_id` 操作：
 
 `PERMISSION_REQUIRED`：由用户检查系统权限；不要绕过 TCC。
 
-`SECURE_INPUT`：停止键盘注入，交由用户处理安全输入场景。
+`SECURE_INPUT`：停止键盘注入和 AX 文本修改，交由用户处理安全输入场景。
+
+`TARGET_IN_USE`：用户正在使用目标应用，停止后台输入。`BACKGROUND_ACTION_UNSUPPORTED`：该动作不允许用于后台模式；不可擅自切换前台。
 
 `DESKTOP_ACTION_FAILED`：可能已经发送部分事件。先观察真实结果，禁止自动重试原动作。
 
@@ -146,5 +188,14 @@ AGENTDOCK_DESKTOP_INPUT_TEST=1 go test -tags desktop_integration \
 ```
 
 缺少支持或系统权限时这些集成测试会说明原因并跳过；跳过不等于通过真实桌面验收。预计超过 90 秒的全量测试或构建应放入 tmux detached session，并检查日志和退出码。
+
+双应用后台验收（与前台输入验收串行运行，不要同时切换测试窗口）：
+
+```sh
+AGENTDOCK_DESKTOP_INPUT_TEST=1 go test -tags desktop_integration \
+  ./internal/tool/desktop -run TestNativeBackgroundTwoApplications -v -count=1
+```
+
+该测试创建后台目标和覆盖它的前台哨兵，核查真实目标状态、窗口截图、前台窗口、first responder 及键盘/鼠标泄漏。只读鼠标事件观察器不监听键盘、不修改或拦截事件；外部鼠标移动单独计数，自动化进入全局鼠标流或无外部事件的光标变化会失败。只有显式测试环境变量指定路径时才保存测试图像/日志；正常工具不保存截图。
 
 当前范围不包含后台虚拟桌面、锁屏绕过、OCR、自带模型、无人值守权限提升或所有第三方应用的业务级适配。多显示器的坐标换算有单测，实际多显示器硬件仍需单独验收。

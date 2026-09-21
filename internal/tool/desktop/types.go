@@ -32,6 +32,7 @@ type Application struct {
 	BundleID string `json:"bundle_id"`
 }
 type State struct {
+	Cursor       Point         `json:"cursor"`
 	FrontmostPID int           `json:"frontmost_pid"`
 	Displays     []Display     `json:"displays"`
 	Windows      []Window      `json:"windows"`
@@ -43,13 +44,14 @@ type Permissions struct {
 	SecureInput     bool `json:"secure_input"`
 }
 type Element struct {
-	ID          string `json:"id"`
-	Role        string `json:"role"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Bounds      Rect   `json:"bounds"`
-	Enabled     bool   `json:"enabled"`
-	Pressable   bool   `json:"pressable"`
+	ID            string `json:"id"`
+	Role          string `json:"role"`
+	Title         string `json:"title"`
+	Description   string `json:"description"`
+	Bounds        Rect   `json:"bounds"`
+	Enabled       bool   `json:"enabled"`
+	Pressable     bool   `json:"pressable"`
+	ValueSettable bool   `json:"value_settable"`
 	// Path 只保存在进程内，不作为可由调用方伪造的 AX 地址公开。
 	Path []int `json:"path,omitempty"`
 }
@@ -81,6 +83,9 @@ type Backend interface {
 }
 
 type SnapshotRequest struct {
+	Mode          string `json:"mode,omitempty"`
+	WindowID      uint32 `json:"window_id,omitempty"`
+	PID           int    `json:"pid,omitempty"`
 	DisplayID     uint32 `json:"display_id,omitempty"`
 	Screenshot    *bool  `json:"screenshot,omitempty"`
 	Accessibility bool   `json:"accessibility,omitempty"`

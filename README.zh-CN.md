@@ -246,4 +246,6 @@ Apache License 2.0. See [LICENSE](./LICENSE).
 
 macOS 14+ 可选启用内置桌面观察与控制：截图、显示器/窗口信息、Accessibility 控件、鼠标、拖拽、滚动、快捷键及 Unicode 输入。核心为 Go + 系统 API，不依赖 Skill、Python、AppleScript 或 Codex MCP。功能默认关闭，在 Mac 高级设置中启用，或设置 `AGENTDOCK_DESKTOP_ENABLED=true`；macOS 构建需要 CGO。
 
+默认只发现窗口；选定窗口后进行后台截图和定向输入。前台接管必须显式 `mode:foreground`，后台失败绝不自动接管。后台指针依赖可检测的非公开窗口坐标桥，系统升级后需要重验，不等同于虚拟桌面。
+
 详见 [原生桌面控制、权限与验收说明](docs/macos-computer-use.md)。

@@ -74,7 +74,7 @@ func (b *fakeBackend) Text(_ context.Context, _ int, text []uint16) error {
 }
 func observe(t *testing.T, s *Service) string {
 	t.Helper()
-	r, e := s.Snapshot(t.Context(), SnapshotRequest{Accessibility: true})
+	r, e := s.Snapshot(t.Context(), SnapshotRequest{Mode: "foreground", Accessibility: true})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -95,24 +95,24 @@ func TestStatusNeverRequestsPermission(t *testing.T) {
 	if e != nil || r["enabled"] != false || len(b.events) != 0 {
 		t.Fatalf("%v %v %v", r, e, b.events)
 	}
-	_, e = s.Snapshot(t.Context(), SnapshotRequest{})
+	_, e = s.Snapshot(t.Context(), SnapshotRequest{Mode: "foreground"})
 	requireCode(t, e, "DESKTOP_DISABLED")
 }
 func TestUnsupportedAndPermissions(t *testing.T) {
 	b := fixtureBackend()
 	s := New(true, b)
 	b.supported = false
-	_, err := s.Snapshot(t.Context(), SnapshotRequest{})
+	_, err := s.Snapshot(t.Context(), SnapshotRequest{Mode: "foreground"})
 	requireCode(t, err, "UNSUPPORTED_PLATFORM")
 	b.supported = true
 	b.permissions.ScreenRecording = false
-	_, err = s.Snapshot(t.Context(), SnapshotRequest{})
+	_, err = s.Snapshot(t.Context(), SnapshotRequest{Mode: "foreground"})
 	requireCode(t, err, "PERMISSION_REQUIRED")
 	no := false
 	b.permissions.Accessibility = false
-	_, err = s.Snapshot(t.Context(), SnapshotRequest{Screenshot: &no, Accessibility: true})
+	_, err = s.Snapshot(t.Context(), SnapshotRequest{Mode: "foreground", Screenshot: &no, Accessibility: true})
 	requireCode(t, err, "PERMISSION_REQUIRED")
-	r, err := s.Snapshot(t.Context(), SnapshotRequest{Screenshot: &no})
+	r, err := s.Snapshot(t.Context(), SnapshotRequest{Mode: "foreground", Screenshot: &no})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestUnsupportedAndPermissions(t *testing.T) {
 func TestSnapshotMetadataAndPrivatePaths(t *testing.T) {
 	b := fixtureBackend()
 	s := New(true, b)
-	r, e := s.Snapshot(t.Context(), SnapshotRequest{Accessibility: true})
+	r, e := s.Snapshot(t.Context(), SnapshotRequest{Mode: "foreground", Accessibility: true})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -167,7 +167,7 @@ func TestImageCoordinatesRequireCapturedImage(t *testing.T) {
 	b := fixtureBackend()
 	s := New(true, b)
 	no := false
-	r, e := s.Snapshot(t.Context(), SnapshotRequest{Screenshot: &no})
+	r, e := s.Snapshot(t.Context(), SnapshotRequest{Mode: "foreground", Screenshot: &no})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -372,6 +372,6 @@ func TestCloseCancelsDragAndRefusesNewInput(t *testing.T) {
 	}
 	_, err := s.Act(t.Context(), ActionRequest{Action: "key", Key: "a", SnapshotID: id})
 	requireCode(t, err, "RUNTIME_CLOSING")
-	_, err = s.Snapshot(t.Context(), SnapshotRequest{})
+	_, err = s.Snapshot(t.Context(), SnapshotRequest{Mode: "foreground"})
 	requireCode(t, err, "RUNTIME_CLOSING")
 }

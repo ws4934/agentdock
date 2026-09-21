@@ -49,7 +49,7 @@ func TestDesktopRuntimeContracts(t *testing.T) {
 	for _, call := range []struct {
 		name string
 		args map[string]any
-	}{{desktop.ToolStatus, nil}, {desktop.ToolPermissions, map[string]any{"permission": "accessibility"}}, {desktop.ToolSnapshot, map[string]any{"accessibility": true}}} {
+	}{{desktop.ToolStatus, nil}, {desktop.ToolPermissions, map[string]any{"permission": "accessibility"}}, {desktop.ToolSnapshot, map[string]any{"mode": "foreground", "accessibility": true}}} {
 		result, e := r.Call(t.Context(), call.name, call.args)
 		if e != nil {
 			t.Fatal(e)
@@ -57,7 +57,7 @@ func TestDesktopRuntimeContracts(t *testing.T) {
 		assertToolResultMatchestestOutputSchema(t, call.name, result)
 	}
 	for _, action := range []map[string]any{{"action": "activate", "pid": 1}, {"action": "click", "point": map[string]any{"x": 10, "y": 10}}, {"action": "move", "point": map[string]any{"x": 10, "y": 10}}, {"action": "scroll", "delta_y": -100}, {"action": "key", "key": "s", "modifiers": []string{"cmd"}}, {"action": "type", "text": "你好"}, {"action": "drag", "path": []map[string]any{{"x": 1, "y": 1}, {"x": 2, "y": 2}}, "duration_ms": 16}} {
-		snapshot, e := r.Call(t.Context(), desktop.ToolSnapshot, map[string]any{"screenshot": false})
+		snapshot, e := r.Call(t.Context(), desktop.ToolSnapshot, map[string]any{"mode": "foreground", "screenshot": false})
 		if e != nil {
 			t.Fatal(e)
 		}

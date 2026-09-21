@@ -15,4 +15,8 @@ int ad_mouse(int pid, int kind, double x, double y, int button, int count, uint6
 int ad_scroll(int pid, int dx, int dy);
 int ad_key(int pid, uint16_t key, uint64_t flags);
 int ad_text(int pid, const uint16_t *text, size_t length);
+int ad_capture_window(uint32_t window, int pid, int dimension, int timeout_ms, unsigned char **data, size_t *size, int *width, int *height);
+char *ad_window_tree(const char *window, int nodes, int depth);
+int ad_window_input(const char *request);
+int ad_background_pointer_supported(void);
 #endif

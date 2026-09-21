@@ -34,7 +34,7 @@ func TestNativeReadOnlyDesktop(t *testing.T) {
 	service := New(true, b)
 	var result core.Result
 	for attempt := 0; attempt < 3; attempt++ {
-		result, err = service.Snapshot(t.Context(), SnapshotRequest{Accessibility: p.Accessibility, MaxNodes: 80, MaxDepth: 6})
+		result, err = service.Snapshot(t.Context(), SnapshotRequest{Mode: "foreground", Accessibility: p.Accessibility, MaxNodes: 80, MaxDepth: 6})
 		if err == nil {
 			break
 		}

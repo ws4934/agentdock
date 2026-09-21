@@ -14,16 +14,38 @@ import (
 	"github.com/uvwt/agentdock/internal/tool/core"
 )
 
+type fixtureMouseState struct {
+	TapActive         bool  `json:"tap_active"`
+	OwnedGlobalEvents int64 `json:"owned_global_events"`
+	ExternalMoves     int64 `json:"external_moves"`
+	Cursor            Point `json:"cursor"`
+}
 type fixtureState struct {
-	PID      int    `json:"pid"`
-	Clicks   int    `json:"clicks"`
-	Scrolls  int    `json:"scrolls"`
-	Drags    int    `json:"drags"`
-	Releases int    `json:"releases"`
-	Text     string `json:"text"`
-	Field    Point  `json:"field"`
-	Button   Point  `json:"button"`
-	Canvas   Point  `json:"canvas"`
+	Downs             int               `json:"downs"`
+	Moves             int               `json:"moves"`
+	MenuEnabled       bool              `json:"menu_enabled"`
+	SelectionLength   int               `json:"selection_length"`
+	LastKeyCode       int               `json:"last_key_code"`
+	LastKeyLength     int               `json:"last_key_length"`
+	LastKeyFlags      uint64            `json:"last_key_flags"`
+	LastEventWindow   int               `json:"last_event_window"`
+	LastEventLocation Point             `json:"last_event_location"`
+	MouseObserver     fixtureMouseState `json:"mouse_observer"`
+	WindowID          uint32            `json:"window_id"`
+	Active            bool              `json:"active"`
+	KeyWindow         bool              `json:"key_window"`
+	Responder         string            `json:"responder"`
+	KeyEvents         int               `json:"key_events"`
+	MouseEvents       int               `json:"mouse_events"`
+	PID               int               `json:"pid"`
+	Clicks            int               `json:"clicks"`
+	Scrolls           int               `json:"scrolls"`
+	Drags             int               `json:"drags"`
+	Releases          int               `json:"releases"`
+	Text              string            `json:"text"`
+	Field             Point             `json:"field"`
+	Button            Point             `json:"button"`
+	Canvas            Point             `json:"canvas"`
 }
 
 // 需要显式设置环境变量，默认 CI 和普通单测绝不发送桌面事件。
@@ -43,7 +65,7 @@ func TestNativeInputIsolatedFixture(t *testing.T) {
 	root := t.TempDir()
 	binary := filepath.Join(root, "AgentDockCUFixture")
 	statePath := filepath.Join(root, "state.json")
-	compile := exec.CommandContext(t.Context(), "xcrun", "clang", "-fobjc-arc", "-framework", "Cocoa", "testdata/fixture.m", "-o", binary)
+	compile := exec.CommandContext(t.Context(), "xcrun", "clang", "-fobjc-arc", "-framework", "Cocoa", "-framework", "ApplicationServices", "testdata/fixture.m", "-o", binary)
 	if output, err := compile.CombinedOutput(); err != nil {
 		t.Fatalf("compile fixture: %v\n%s", err, output)
 	}
@@ -80,7 +102,7 @@ func TestNativeInputIsolatedFixture(t *testing.T) {
 	noImage := false
 	var activation core.Result
 	for attempt := 0; attempt < 5; attempt++ {
-		activation, err = service.Snapshot(t.Context(), SnapshotRequest{Screenshot: &noImage})
+		activation, err = service.Snapshot(t.Context(), SnapshotRequest{Mode: "foreground", Screenshot: &noImage})
 		if err == nil {
 			break
 		}
@@ -99,7 +121,7 @@ func TestNativeInputIsolatedFixture(t *testing.T) {
 	snapshot := func() core.Result {
 		t.Helper()
 		for attempt := 0; attempt < 3; attempt++ {
-			result, e := service.Snapshot(t.Context(), SnapshotRequest{Accessibility: true, MaxNodes: 150, MaxDepth: 8})
+			result, e := service.Snapshot(t.Context(), SnapshotRequest{Mode: "foreground", Accessibility: true, MaxNodes: 150, MaxDepth: 8})
 			if e == nil {
 				if result["state"].(State).FrontmostPID != state.PID {
 					t.Fatal("test fixture lost foreground; refusing input into another application")
