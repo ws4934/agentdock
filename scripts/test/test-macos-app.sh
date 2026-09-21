@@ -90,7 +90,7 @@ payload_build="$TMP_ROOT/offline-build"
 mkdir -p "$payload_dir" "$payload_build/bin" "$payload_build/share/agentdock"
 (
   cd "$ROOT_DIR"
-  CGO_ENABLED=0 GOOS=darwin GOARCH="$release_arch" \
+  CGO_ENABLED=1 GOOS=darwin GOARCH="$release_arch" \
     go build -trimpath -o "$payload_build/bin/agentdock" ./cmd/agentdock
 )
 python3 "$ROOT_DIR/packaging/build-core-skill-bundle.py" \

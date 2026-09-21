@@ -64,6 +64,12 @@ struct InstallerConfigurationTests {
         precondition(ServiceConfiguration.load(from: serviceEnvironmentURL)?.mcpAppsEnabled == true)
         try Data("AGENTDOCK_PORT=8765\nAGENTDOCK_MCP_APPS_ENABLED=false\n".utf8).write(to: serviceEnvironmentURL)
         precondition(ServiceConfiguration.load(from: serviceEnvironmentURL)?.mcpAppsEnabled == false)
+        precondition(ServiceConfiguration.load(from: serviceEnvironmentURL)?.desktopEnabled == false)
+        let desktopEnvironment = try ManagedEnvironment.load(from: serviceEnvironmentURL)
+        let desktopData = try desktopEnvironment.dataByUpdating(["AGENTDOCK_DESKTOP_ENABLED": "true"])
+        try desktopData.write(to: serviceEnvironmentURL)
+        precondition(ServiceConfiguration.load(from: serviceEnvironmentURL)?.desktopEnabled == true)
+
 
         let nexusIdentityURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("agentdock-nexus-\(UUID().uuidString).json")

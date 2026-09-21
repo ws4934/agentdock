@@ -357,3 +357,7 @@
 "Command" = "命令";
 "Args JSON" = "参数 JSON";
 "Save" = "保存";
+
+/* Native Computer Use */
+"Enable native macOS Computer Use" = "启用原生 macOS 桌面控制";
+"Requires macOS 14+, Accessibility and Screen Recording. Visible screen content is sent to your connected AI client." = "需要 macOS 14+、辅助功能和屏幕录制权限。屏幕可见内容将发送给你连接的 AI 客户端。";

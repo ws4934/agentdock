@@ -5,6 +5,7 @@ struct EditableServiceSettings {
     let port: Int
     let logLevel: String
     let mcpAppsEnabled: Bool
+    let desktopEnabled: Bool
     let browserEnabled: Bool
     let browserCDPURL: String
     let browserReuseExistingCDP: Bool
@@ -16,6 +17,7 @@ struct EditableServiceSettings {
         port: Int,
         logLevel: String,
         mcpAppsEnabled: Bool,
+        desktopEnabled: Bool = false,
         browserEnabled: Bool,
         browserCDPURL: String,
         browserReuseExistingCDP: Bool,
@@ -26,6 +28,7 @@ struct EditableServiceSettings {
         self.port = port
         self.logLevel = logLevel
         self.mcpAppsEnabled = mcpAppsEnabled
+        self.desktopEnabled = desktopEnabled
         self.browserEnabled = browserEnabled
         self.browserCDPURL = browserCDPURL
         self.browserReuseExistingCDP = browserReuseExistingCDP
@@ -110,6 +113,7 @@ struct EditableServiceSettings {
             port: port,
             logLevel: normalizedLogLevel,
             mcpAppsEnabled: mcpAppsEnabled,
+            desktopEnabled: desktopEnabled,
             browserEnabled: browserEnabled,
             browserCDPURL: browserCDPURL,
             browserReuseExistingCDP: browserReuseExistingCDP,
@@ -167,6 +171,7 @@ final class ServiceConfigurationController {
             "AGENTDOCK_PORT": String(settings.port),
             "AGENTDOCK_LOG_LEVEL": settings.logLevel,
             "AGENTDOCK_MCP_APPS_ENABLED": settings.mcpAppsEnabled ? "true" : "false",
+            "AGENTDOCK_DESKTOP_ENABLED": settings.desktopEnabled ? "true" : "false",
             "AGENTDOCK_BROWSER_ENABLED": settings.browserEnabled ? "true" : "false",
             "AGENTDOCK_BROWSER_CDP_URL": settings.browserCDPURL,
             "AGENTDOCK_BROWSER_REUSE_EXISTING_CDP": settings.browserReuseExistingCDP ? "true" : "false",

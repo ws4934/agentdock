@@ -357,3 +357,7 @@
 "Command" = "Command";
 "Args JSON" = "Args JSON";
 "Save" = "Save";
+
+/* Native Computer Use */
+"Enable native macOS Computer Use" = "Enable native macOS Computer Use";
+"Requires macOS 14+, Accessibility and Screen Recording. Visible screen content is sent to your connected AI client." = "Requires macOS 14+, Accessibility and Screen Recording. Visible screen content is sent to your connected AI client.";

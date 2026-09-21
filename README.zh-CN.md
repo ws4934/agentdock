@@ -241,3 +241,9 @@ Apache License 2.0. See [LICENSE](./LICENSE).
 ## 交流反馈
 
 [加入 QQ 群（1081337019）](https://qun.qq.com/universal-share/share?ac=1&authKey=Rp86bSzI7vqm87KoYlKawgsPZ440Ubhyezw6Qkgcn3JISwX3zXxsXkbS5598RrY5&busi_data=eyJncm91cENvZGUiOiIxMDgxMzM3MDE5IiwidG9rZW4iOiJ0Mlg1bUU1ZWtuZzF3SHJDT3pSaGsrOURIMlNYaXBlYllOUjNLZ1BUb1hzM2lJSTZjeVNldzU0ajl0SjRVZkx2IiwidWluIjoiMzIwMjA4ODAzMiJ9&data=W28mWvuqaLf_Fwnf0CgAJXuDs6l3A78V7AoWZnizPboCpKoQMzHzZ-UlluYo47U3tmIBHK2xIgWEVEJbTiGsPQ&svctype=4&tempid=h5_group_info)
+
+## 原生 macOS Computer Use
+
+macOS 14+ 可选启用内置桌面观察与控制：截图、显示器/窗口信息、Accessibility 控件、鼠标、拖拽、滚动、快捷键及 Unicode 输入。核心为 Go + 系统 API，不依赖 Skill、Python、AppleScript 或 Codex MCP。功能默认关闭，在 Mac 高级设置中启用，或设置 `AGENTDOCK_DESKTOP_ENABLED=true`；macOS 构建需要 CGO。
+
+详见 [原生桌面控制、权限与验收说明](docs/macos-computer-use.md)。

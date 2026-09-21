@@ -238,3 +238,9 @@ Apache License 2.0. See [LICENSE](./LICENSE).
 ## Community
 
 [Join the QQ group (1081337019)](https://qun.qq.com/universal-share/share?ac=1&authKey=Rp86bSzI7vqm87KoYlKawgsPZ440Ubhyezw6Qkgcn3JISwX3zXxsXkbS5598RrY5&busi_data=eyJncm91cENvZGUiOiIxMDgxMzM3MDE5IiwidG9rZW4iOiJ0Mlg1bUU1ZWtuZzF3SHJDT3pSaGsrOURIMlNYaXBlYllOUjNLZ1BUb1hzM2lJSTZjeVNldzU0ajl0SjRVZkx2IiwidWluIjoiMzIwMjA4ODAzMiJ9&data=W28mWvuqaLf_Fwnf0CgAJXuDs6l3A78V7AoWZnizPboCpKoQMzHzZ-UlluYo47U3tmIBHK2xIgWEVEJbTiGsPQ&svctype=4&tempid=h5_group_info)
+
+## Native macOS Computer Use
+
+An opt-in native desktop capability for macOS 14+: screenshots, displays/windows, Accessibility elements, pointer actions, dragging, scrolling, shortcuts, and Unicode typing. The implementation uses Go plus a thin system API bridge, not a Skill, Python, AppleScript, or a Codex MCP dependency. Enable it in the Mac advanced settings or set `AGENTDOCK_DESKTOP_ENABLED=true`; macOS builds require CGO.
+
+See [desktop control, permissions, and verification](docs/macos-computer-use.md).
