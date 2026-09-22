@@ -283,6 +283,13 @@ func (s *Service) Wait(ctx context.Context, r WaitRequest) (core.Result, error) 
 		case <-timer.C:
 		}
 	}
+	// 最后一次采样返回时也可能刚被用户取消；不能把取消竞态包装成 met/timeout。
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if !s.control.valid(ctx, s.control.epoch(ctx)) {
+		return nil, controlError("DESKTOP_CONTROL_BLOCKED", "Condition observation was stopped before completion")
+	}
 	outcome := "timeout"
 	if met {
 		outcome = "met"
