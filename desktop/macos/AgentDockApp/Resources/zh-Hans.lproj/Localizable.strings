@@ -475,3 +475,29 @@
 "Failed or partially executed" = "失败或部分执行";
 
 "Finished · result not verified" = "已结束 · 结果未验证";
+
+"Not active" = "当前未生效";
+
+"Menu app · current process" = "菜单栏应用 · 当前进程";
+
+"Core · automation process" = "Core · 执行进程";
+
+"This page reports access for the menu app and running Core separately, not the switches in System Settings. It refreshes while open and when you return from Settings. Grant only the permissions you need." = "这里分别检查菜单栏应用和运行中 Core 的实际权限，不代表系统设置中的开关状态。页面打开期间及返回应用时会自动刷新，按需授权即可。";
+
+"Core status is unavailable. Start the matching Core version; menu app access is not proof of Core access." = "暂时无法读取 Core 状态，请启动配套版本的 Core；菜单栏应用已获权限，不代表 Core 也已生效。";
+
+"If the system switch is on but access is not active, quit and reopen the affected app or Core. After replacing a build, remove the old AgentDock entry and add this installed app again in the affected permission page. Recheck after reopening; enabling a switch does not prove this process can use it." = "若系统开关已打开但仍未生效，请先退出并重新打开对应的应用或 Core。替换过安装包时，在对应权限页移除旧 AgentDock 项，再添加当前已安装的应用并授权。重新打开后再检查，不能仅凭开关判断进程可用。";
+
+"This is an ad-hoc signed build. Rebuilding changes its code identity, so macOS may reject a previous permission grant. Stable certificate signing is needed to preserve identity across updates." = "当前是 ad-hoc 本机签名构建，重新编译会改变代码身份，macOS 可能因此拒绝旧授权。要让授权稳定跨版本保留，需要持续使用同一证书签名身份。";
+
+"Locate this app" = "定位当前应用";
+
+"Permission recovery…" = "权限修复说明…";
+
+"System switch on, but access not active?" = "系统已打开开关，但权限未生效？";
+
+"OK" = "确定";
+
+"Locate Core" = "定位 Core";
+
+"Checking…" = "正在检查…";

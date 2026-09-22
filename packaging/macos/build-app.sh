@@ -393,6 +393,7 @@ sign_macos_code() {
 
 if [[ "$CODESIGN_IDENTITY" == "-" ]]; then
   print -- "==> ad-hoc 签名 AgentDock.app"
+  print -- "WARNING: ad-hoc 签名随重新构建改变代码身份；旧 TCC 权限可能不适用于新包。稳定跨版本授权请设置 AGENTDOCK_CODESIGN_IDENTITY 使用同一证书，不要放宽代码签名校验。"
 else
   print -- "==> 使用指定身份签名 AgentDock.app"
 fi

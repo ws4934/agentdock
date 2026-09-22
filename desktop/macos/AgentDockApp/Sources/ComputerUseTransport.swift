@@ -53,13 +53,15 @@ struct ComputerUseTransport {
 
     // 每次请求独立连接并发送 EOF。只有受本机文件权限保护的 Unix socket，无 HTTP 监听。
     func callSync(operation: String? = nil, sessionID: String = "", visibleID: String = "", stopSessionID: String = "", approvalID: String = "", pauseSessionID: String = "") throws -> ComputerUseState {
-        struct Reply: Decodable {
-            struct Failure: Decodable { let message: String }
-            let id: String
-            let result: ComputerUseState?
-            let error: Failure?
-        }
-        struct TransportError: LocalizedError { let message: String; var errorDescription: String? { message } }
+        var params: [String: Any] = ["controller_pid": ProcessInfo.processInfo.processIdentifier, "controller_id": controllerID, "session_id": sessionID, "visible_session_id": visibleID]
+        if let operation { params["operation"] = operation }
+        if !stopSessionID.isEmpty { params["stop_session_id"] = stopSessionID }
+        if !approvalID.isEmpty { params["approval_id"] = approvalID }
+        if !pauseSessionID.isEmpty { params["pause_session_id"] = pauseSessionID }
+        return try requestSync(method: operation == nil ? "computeruse.poll" : "computeruse.command", params: params)
+    }
+
+    func requestSync<Value: Decodable>(method: String, params: [String: Any]) throws -> Value {
         let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw TransportError(message: "Local socket unavailable") }
         defer { Darwin.close(fd) }
@@ -81,12 +83,7 @@ struct ComputerUseTransport {
         }
         guard connected == 0 else { throw TransportError(message: "Local Computer Use service unavailable") }
         let id = UUID().uuidString
-        var params: [String: Any] = ["controller_pid": ProcessInfo.processInfo.processIdentifier, "controller_id": controllerID, "session_id": sessionID, "visible_session_id": visibleID]
-        if let operation { params["operation"] = operation }
-        if !stopSessionID.isEmpty { params["stop_session_id"] = stopSessionID }
-        if !approvalID.isEmpty { params["approval_id"] = approvalID }
-        if !pauseSessionID.isEmpty { params["pause_session_id"] = pauseSessionID }
-        let payload = try JSONSerialization.data(withJSONObject: ["id": id, "method": operation == nil ? "computeruse.poll" : "computeruse.command", "params": params])
+        let payload = try JSONSerialization.data(withJSONObject: ["id": id, "method": method, "params": params])
         try payload.withUnsafeBytes { raw in
             var written = 0
             while written < raw.count {
@@ -104,10 +101,21 @@ struct ComputerUseTransport {
             guard count > 0, response.count + count <= 1_048_576 else { throw TransportError(message: "Local control response unavailable or oversized") }
             response.append(contentsOf: buffer.prefix(count))
         }
-        let reply = try JSONDecoder().decode(Reply.self, from: response)
+        let reply = try JSONDecoder().decode(DesktopControlReply<Value>.self, from: response)
         guard reply.id == id else { throw TransportError(message: "Local control response mismatch") }
         if let error = reply.error { throw TransportError(message: error.message) }
         guard let result = reply.result else { throw TransportError(message: "Local control response missing") }
         return result
     }
+}
+
+private struct DesktopControlReply<Value: Decodable>: Decodable {
+    struct Failure: Decodable { let message: String }
+    let id: String
+    let result: Value?
+    let error: Failure?
+}
+private struct TransportError: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
 }

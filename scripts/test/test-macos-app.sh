@@ -80,6 +80,20 @@ swiftc \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/PermissionUIComponents.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Tests/PermissionCheckerTests.swift" \
   -o "$TMP_ROOT/permission-checker-tests"
+
+swiftc \
+  -swift-version 5 -parse-as-library \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/Localization.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ComputerUseTransport.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/DesktopPermissionChecker.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/DesktopPermissionDiagnostics.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/DesktopPermissionsWindowController.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/FileAccessPermissionChecker.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/FileAccessPermissionsWindowController.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/PermissionUIComponents.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Tests/DesktopPermissionDiagnosticsTests.swift" \
+  -o "$TMP_ROOT/desktop-permission-diagnostics-tests"
+"$TMP_ROOT/desktop-permission-diagnostics-tests"
 "$TMP_ROOT/permission-checker-tests"
 
 mkdir -p "$TMP_ROOT/output"

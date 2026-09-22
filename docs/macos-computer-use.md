@@ -35,6 +35,8 @@ AGENTDOCK_DESKTOP_ENABLED=true ./bin/agentdock --stdio
 
 ## 系统权限
 
+系统开关已打开但当前进程仍不可用时，先核对[签名身份与权限恢复说明](macos-permission-recovery.md)。新版权限页自动刷新，并分别显示菜单栏应用和实际 Core 的 API 结果；不会依据开关或另一个进程的权限显示成功。
+
 先调用 `desktop_status`。在“系统设置 → 隐私与安全性”中，为**实际运行 AgentDock 的宿主进程**授予辅助功能和屏幕录制权限。CLI、Terminal、菜单栏应用和被嵌入的 helper 可能具有不同的权限归属；以服务返回的实际状态为准，而不是以另一个应用的状态推断。
 
 `desktop_permissions` 仅在用户明确同意后用于请求系统授权弹窗，参数为 `accessibility` 或 `screen_recording`。它不能自行授予权限。某些授权变更需要重启进程。重新构建、替换路径或改变签名也可能需要重新授权。生产发布应沿用稳定的应用路径和签名身份。

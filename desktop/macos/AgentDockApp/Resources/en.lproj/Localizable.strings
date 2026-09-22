@@ -475,3 +475,29 @@
 "Failed or partially executed" = "Failed or partially executed";
 
 "Finished · result not verified" = "Finished · result not verified";
+
+"Not active" = "Not active";
+
+"Menu app · current process" = "Menu app · current process";
+
+"Core · automation process" = "Core · automation process";
+
+"This page reports access for the menu app and running Core separately, not the switches in System Settings. It refreshes while open and when you return from Settings. Grant only the permissions you need." = "This page reports access for the menu app and running Core separately, not the switches in System Settings. It refreshes while open and when you return from Settings. Grant only the permissions you need.";
+
+"Core status is unavailable. Start the matching Core version; menu app access is not proof of Core access." = "Core status is unavailable. Start the matching Core version; menu app access is not proof of Core access.";
+
+"If the system switch is on but access is not active, quit and reopen the affected app or Core. After replacing a build, remove the old AgentDock entry and add this installed app again in the affected permission page. Recheck after reopening; enabling a switch does not prove this process can use it." = "If the system switch is on but access is not active, quit and reopen the affected app or Core. After replacing a build, remove the old AgentDock entry and add this installed app again in the affected permission page. Recheck after reopening; enabling a switch does not prove this process can use it.";
+
+"This is an ad-hoc signed build. Rebuilding changes its code identity, so macOS may reject a previous permission grant. Stable certificate signing is needed to preserve identity across updates." = "This is an ad-hoc signed build. Rebuilding changes its code identity, so macOS may reject a previous permission grant. Stable certificate signing is needed to preserve identity across updates.";
+
+"Locate this app" = "Locate this app";
+
+"Permission recovery…" = "Permission recovery…";
+
+"System switch on, but access not active?" = "System switch on, but access not active?";
+
+"OK" = "OK";
+
+"Locate Core" = "Locate Core";
+
+"Checking…" = "Checking…";
