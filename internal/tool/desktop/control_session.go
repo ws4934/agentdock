@@ -15,14 +15,16 @@ const monitorLease = 3 * time.Second
 const monitorIdle = 60 * time.Second
 
 type ControlState struct {
-	SequenceStep       int                  `json:"sequence_step,omitempty"`
-	SequenceTotal      int                  `json:"sequence_total,omitempty"`
-	Events             []ControlEvent       `json:"recent_operations,omitempty"`
-	TaskRequired       bool                 `json:"task_required"`
-	TaskLabel          string               `json:"task_label"`
-	TaskReference      string               `json:"task_reference"`
-	PendingApplication *ApplicationApproval `json:"pending_application,omitempty"`
-	StepMode           bool                 `json:"step_mode"`
+	TrustedApplications []TrustedApplication `json:"trusted_applications,omitempty"`
+	TrustAvailable      bool                 `json:"trust_available,omitempty"`
+	SequenceStep        int                  `json:"sequence_step,omitempty"`
+	SequenceTotal       int                  `json:"sequence_total,omitempty"`
+	Events              []ControlEvent       `json:"recent_operations,omitempty"`
+	TaskRequired        bool                 `json:"task_required"`
+	TaskLabel           string               `json:"task_label"`
+	TaskReference       string               `json:"task_reference"`
+	PendingApplication  *ApplicationApproval `json:"pending_application,omitempty"`
+	StepMode            bool                 `json:"step_mode"`
 
 	Enabled         bool        `json:"enabled"`
 	Required        bool        `json:"monitor_required"`
@@ -43,6 +45,7 @@ type ControlState struct {
 }
 
 type ControlRequest struct {
+	TrustID          string `json:"trust_id,omitempty"`
 	PauseSessionID   string `json:"pause_session_id,omitempty"`
 	ControllerPID    int    `json:"controller_pid,omitempty"`
 	ApprovalID       string `json:"approval_id,omitempty"`
@@ -56,6 +59,10 @@ type ControlRequest struct {
 type controlEpochKey struct{}
 type controlActivityKey struct{}
 type controlSession struct {
+	trustPath     string
+	trustList     []TrustedApplication
+	trusted       map[string]TrustedApplication
+	approvalWake  chan struct{}
 	controllerPID int
 	eventSequence uint64
 	taskKey       string
@@ -342,7 +349,7 @@ func (m *controlSession) local(r ControlRequest, poll bool) (ControlState, error
 		return ControlState{}, controlError("DESKTOP_MONITOR_BUSY", "Another local Computer Use panel owns the control lease")
 	}
 	if poll {
-		if r.Operation != "" || r.ApprovalID != "" || r.ControllerPID < 0 {
+		if r.Operation != "" || r.ApprovalID != "" || r.TrustID != "" || r.ControllerPID < 0 {
 			return ControlState{}, invalid("poll cannot mutate the control state")
 		}
 		// 重新建立连接的心跳携带停止意图，先停止再续租；不能把重连当继续许可。
@@ -374,7 +381,14 @@ func (m *controlSession) local(r ControlRequest, poll bool) (ControlState, error
 	if r.SessionID != m.view.ID {
 		return ControlState{}, stale("Local control command belongs to another session")
 	}
+	if r.TrustID != "" && r.Operation != "revoke_application" {
+		return ControlState{}, invalid("trust_id only applies to revoke_application")
+	}
 	switch r.Operation {
+	case "revoke_application":
+		if err := m.forgetApplicationLocked(r.TrustID); err != nil {
+			return ControlState{}, err
+		}
 	case "pause":
 		if m.view.Phase == "running" {
 			m.blockLocked("paused", "user_paused")
@@ -389,18 +403,23 @@ func (m *controlSession) local(r ControlRequest, poll bool) (ControlState, error
 		}
 		m.view.CleanupFailed = false
 		m.blockLocked("stopped", "cleanup_acknowledged_locally")
-	case "approve_application", "deny_application":
+	case "approve_application", "approve_application_always", "deny_application":
 		approval := m.view.PendingApplication
 		if m.view.Phase != "running" || approval == nil || r.ApprovalID != approval.ID {
 			return ControlState{}, stale("Application authorization request changed")
 		}
 		key := applicationGrantKey(approval.Application, approval.Mode)
-		if r.Operation == "approve_application" {
+		if r.Operation == "approve_application_always" {
+			if err := m.rememberApplicationLocked(approval.Application, approval.Mode); err != nil {
+				return ControlState{}, err
+			}
+		} else if r.Operation == "approve_application" {
 			m.grants[key] = true
 		} else {
 			m.denials[key] = true
 		}
 		m.view.PendingApplication = nil
+		m.notifyApprovalLocked()
 	case "end_task":
 		if m.view.Active != 0 || m.view.CleanupFailed {
 			return ControlState{}, controlError("DESKTOP_CONTROL_DRAINING", "Stop and complete input cleanup before releasing a task")
@@ -434,7 +453,15 @@ func (m *controlSession) local(r ControlRequest, poll bool) (ControlState, error
 
 func (s *Service) RequireMonitor() { s.control.require(s.lifetime) }
 func (s *Service) LocalControl(r ControlRequest, poll bool) (ControlState, error) {
-	return s.control.local(r, poll)
+	state, err := s.control.local(r, poll)
+	if err != nil {
+		return state, err
+	}
+	s.control.mu.Lock()
+	state.TrustedApplications = append([]TrustedApplication(nil), s.control.trustList...)
+	state.TrustAvailable = s.control.trustPath != ""
+	s.control.mu.Unlock()
+	return state, nil
 }
 func (s *Service) controlled(ctx context.Context, activity string) (context.Context, func(), error) {
 	return s.control.acquire(ctx, activity)

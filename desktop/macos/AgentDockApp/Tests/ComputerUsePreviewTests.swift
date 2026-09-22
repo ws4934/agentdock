@@ -6,6 +6,10 @@ struct ComputerUsePreviewTests {
     @MainActor static func main() async {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let target = ComputerUseWindow(id: 123, pid: 456, title: "Synthetic test target", bounds: ComputerUseRect(x: 0, y: 0, width: 500, height: 300))
+        let renamed = ComputerUseWindow(id: 123, pid: 456, title: "Renamed", bounds: ComputerUseRect(x: 20, y: 40, width: 500, height: 300))
+        let resized = ComputerUseWindow(id: 123, pid: 456, title: "Renamed", bounds: ComputerUseRect(x: 20, y: 40, width: 600, height: 300))
+        precondition(ComputerUsePreview.sameCaptureTarget(target, renamed), "title/move must not restart capture")
+        precondition(!ComputerUsePreview.sameCaptureTarget(target, resized), "resize must update capture")
         var attempts = 0
         var now = Date()
         let preview = ComputerUsePreview(permissionCheck: { true }, contentProvider: {
@@ -19,6 +23,9 @@ struct ComputerUsePreviewTests {
         preview.select(target)
         try? await Task.sleep(nanoseconds: 50_000_000)
         precondition(attempts == 1, "must respect retry backoff")
+        preview.select(renamed)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        precondition(attempts == 1, "renaming/moving reset the retry budget")
         for _ in 0..<6 {
             now = now.addingTimeInterval(10); preview.select(target)
             try? await Task.sleep(nanoseconds: 60_000_000)

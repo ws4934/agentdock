@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -92,6 +93,11 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	runtime.files = toolfile.New(ws, skills.ResolveResource, runtime.command.CommandEnv)
 	runtime.dynamicMCP = toolmcp.New(mcpClients, envs)
 	runtime.desktop = tooldesktop.New(cfg.DesktopEnabled, nil)
+	if cfg.DesktopEnabled {
+		if err := runtime.desktop.ConfigureApplicationTrust(filepath.Join(cfg.AgentDockHome, "desktop", "trusted-applications.json")); err != nil {
+			slog.Warn("persistent desktop application approval unavailable; using task-only approval", "error", err)
+		}
+	}
 	runtime.media = toolmedia.New(cfg, ws, runtime.command.InternalCommandEnv)
 	runtime.browser = toolbrowser.New(
 		toolbrowser.Config{AgentDockHome: cfg.AgentDockHome, ExecutablePath: cfg.BrowserExecutablePath, CDPURL: cfg.BrowserCDPURL, ReuseExistingCDP: cfg.BrowserReuseExistingCDP},

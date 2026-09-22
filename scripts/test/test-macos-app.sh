@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="${0:A:h:h:h}"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/agentdock-macos-app-test.XXXXXX")"
+FAULT_ROOT="$(mktemp -d /tmp/agentdock-ui.XXXXXX)"
 MOUNT_POINT="$TMP_ROOT/mount"
 MOUNTED=false
 
@@ -11,10 +12,29 @@ cleanup() {
     hdiutil detach "$MOUNT_POINT" -force >/dev/null 2>&1 || true
   fi
   rm -rf "$TMP_ROOT"
+  rm -rf "$FAULT_ROOT"
 }
 trap cleanup EXIT
 
 python3 "$ROOT_DIR/scripts/test/check-macos-i18n.py"
+
+monitor_sources=(
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/Localization.swift"
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ComputerUseTransport.swift"
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ComputerUseEmergencyHotkey.swift"
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ComputerUsePreview.swift"
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ComputerUseMonitor.swift"
+)
+swiftc -swift-version 5 -parse-as-library "${monitor_sources[@]}" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Tests/ComputerUsePanelTests.swift" -o "$TMP_ROOT/panel-tests"
+if [[ -n "${AGENTDOCK_PANEL_TEST_OUTPUT_DIR:-}" ]]; then
+  "$TMP_ROOT/panel-tests" "$AGENTDOCK_PANEL_TEST_OUTPUT_DIR"
+else
+  "$TMP_ROOT/panel-tests"
+fi
+swiftc -swift-version 5 -parse-as-library "${monitor_sources[@]}" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Tests/ComputerUseFaultHarness.swift" -o "$TMP_ROOT/monitor-fault-tests"
+python3 "$ROOT_DIR/scripts/test/test-computer-use-faults.py" "$FAULT_ROOT" "$TMP_ROOT/monitor-fault-tests"
 
 swiftc -swift-version 5 -parse-as-library \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/Localization.swift" \

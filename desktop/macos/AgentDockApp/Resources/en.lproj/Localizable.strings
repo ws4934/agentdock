@@ -506,3 +506,12 @@
 "Sequence" = "Sequence";
 "Sequence complete" = "Sequence complete";
 "Sequence interrupted" = "Sequence interrupted";
+"Allow once" = "Allow once";
+"Always allow" = "Always allow";
+"Show preview" = "Show preview";
+"Hide preview" = "Hide preview";
+"Change not applied" = "Change not applied";
+"Foreground" = "Foreground";
+"Background" = "Background";
+"Revoke" = "Revoke";
+"Trusted applications" = "Trusted applications";

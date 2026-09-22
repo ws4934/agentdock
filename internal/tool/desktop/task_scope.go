@@ -23,9 +23,10 @@ type TaskRequest struct {
 	Title  string `json:"title,omitempty"`
 }
 type ApplicationApproval struct {
-	ID          string      `json:"id"`
-	Application Application `json:"application"`
-	Mode        string      `json:"mode"`
+	Rememberable bool        `json:"rememberable"`
+	ID           string      `json:"id"`
+	Application  Application `json:"application"`
+	Mode         string      `json:"mode"`
 }
 type taskContextKey struct{}
 
@@ -144,7 +145,7 @@ func protectedApplication(a Application) bool {
 	return a.PID == os.Getpid() || id == "com.uvwt.agentdock" || strings.HasPrefix(id, "com.uvwt.agentdock.") || id == "com.apple.systempreferences" || id == "com.apple.loginwindow" || id == "com.apple.securityagent"
 }
 
-// 一次授权仅覆盖当前任务中的精确应用身份与模式。拒绝/停止后不重新弹窗逼迫用户。
+// 本次许可与持久信任都绑定精确应用身份和模式；拒绝与本机停止不被持久信任覆盖。
 func (m *controlSession) authorize(ctx context.Context, a Application, mode string) error {
 	m.mu.Lock()
 	if !m.view.TaskRequired && m.taskKey == "" {
@@ -164,7 +165,7 @@ func (m *controlSession) authorize(ctx context.Context, a Application, mode stri
 		return controlError("DESKTOP_APPLICATION_UNIDENTIFIED", "Cannot authorize an application without a stable bundle path or live PID")
 	}
 	key := applicationGrantKey(a, mode)
-	if m.grants[key] {
+	if m.applicationAllowedLocked(key) {
 		m.mu.Unlock()
 		return nil
 	}
@@ -178,6 +179,11 @@ func (m *controlSession) authorize(ctx context.Context, a Application, mode stri
 		return e
 	}
 	request := &ApplicationApproval{ID: id[:32], Application: a, Mode: mode}
+	_, trustErr := trustedApplication(a, mode)
+	request.Rememberable = m.trustPath != "" && trustErr == nil
+	if m.approvalWake == nil {
+		m.approvalWake = make(chan struct{})
+	}
 	m.view.PendingApplication = request
 	m.mu.Unlock()
 	defer func() {
@@ -189,12 +195,11 @@ func (m *controlSession) authorize(ctx context.Context, a Application, mode stri
 	}()
 	deadline := time.NewTimer(30 * time.Second)
 	defer deadline.Stop()
-	tick := time.NewTicker(100 * time.Millisecond)
-	defer tick.Stop()
 	for {
 		m.mu.Lock()
 		m.expireLocked()
-		allowed, denied := m.grants[key], m.denials[key]
+		allowed, denied := m.applicationAllowedLocked(key), m.denials[key]
+		wake := m.approvalWake
 		valid := m.view.Phase == "running" && m.view.Epoch == m.epoch(ctx) && m.ownerValidLocked(ctx) == nil
 		m.mu.Unlock()
 		if ctx.Err() != nil || !valid {
@@ -211,7 +216,7 @@ func (m *controlSession) authorize(ctx context.Context, a Application, mode stri
 			return ctx.Err()
 		case <-deadline.C:
 			return controlError("DESKTOP_APPROVAL_REQUIRED", "Local application approval timed out; no input or capture was performed")
-		case <-tick.C:
+		case <-wake:
 		}
 	}
 }

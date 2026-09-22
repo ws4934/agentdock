@@ -57,8 +57,13 @@ final class ComputerUsePreview: NSObject, SCStreamOutput, SCStreamDelegate {
     private(set) var lastFrame = Date.distantPast
     private(set) var frameCount = 0
 
+    static func sameCaptureTarget(_ a: ComputerUseWindow?, _ b: ComputerUseWindow?) -> Bool {
+        guard let a, let b else { return a == nil && b == nil }
+        return a.id == b.id && a.pid == b.pid && a.bounds.width == b.bounds.width && a.bounds.height == b.bounds.height
+    }
+
     func select(_ target: ComputerUseWindow?) {
-        if target != selected { attempts = 0; retryAt = .distantPast }
+        if !Self.sameCaptureTarget(target, selected) { attempts = 0; retryAt = .distantPast }
         else if target == nil || stream != nil || starting || attempts >= 4 || clock() < retryAt || requiresUserRestart { return }
         selected = target
         if target != nil && requiresUserRestart { return }
@@ -134,17 +139,20 @@ final class ComputerUsePreview: NSObject, SCStreamOutput, SCStreamDelegate {
 
 @MainActor
 final class ComputerUseCanvas: NSView {
-    var image: CGImage? { didSet { needsDisplay = true } }
-    var point: ComputerUsePoint? { didSet { needsDisplay = true } }
-    var targetBounds: ComputerUseRect? { didSet { needsDisplay = true } }
-    var message = "" { didSet { needsDisplay = true } }
+    var image: CGImage? { didSet { if image !== oldValue { needsDisplay = true } } }
+    var point: ComputerUsePoint? { didSet { if point != oldValue { needsDisplay = true } } }
+    var targetBounds: ComputerUseRect? { didSet { if targetBounds != oldValue { needsDisplay = true } } }
+    var message = "" { didSet { if message != oldValue { needsDisplay = true } } }
     override var isFlipped: Bool { true }
     override func draw(_ dirtyRect: NSRect) {
         NSColor.controlBackgroundColor.setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: 9, yRadius: 9).fill()
+        NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12).fill()
         guard let image else {
-            let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.secondaryLabelColor]
-            (message as NSString).draw(in: bounds.insetBy(dx: 14, dy: max(12, bounds.height / 2 - 16)), withAttributes: attrs)
+            let centered = NSMutableParagraphStyle(); centered.alignment = .center
+            let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor, .paragraphStyle: centered]
+            let symbol = NSImage(systemSymbolName: "cursorarrow.motionlines", accessibilityDescription: nil)?.withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [.tertiaryLabelColor]))
+            symbol?.draw(in: NSRect(x: bounds.midX - 14, y: bounds.midY - 30, width: 28, height: 28), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            (message as NSString).draw(in: NSRect(x: 18, y: bounds.midY + 8, width: bounds.width - 36, height: 40), withAttributes: attrs)
             return
         }
         let ratio = min(bounds.width / CGFloat(image.width), bounds.height / CGFloat(image.height))

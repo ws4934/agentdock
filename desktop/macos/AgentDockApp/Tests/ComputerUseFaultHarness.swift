@@ -26,7 +26,7 @@ final class AuditDelegate: NSObject, NSApplicationDelegate {
    // 与菜单跟踪/拖动窗口相同的 run-loop mode；不生成任何鼠标或键盘事件。
    let keepAlive=Timer(timeInterval:0.1,repeats:true){_ in}
    RunLoop.main.add(keepAlive,forMode:.eventTracking)
-   CFRunLoopRunInMode(CFRunLoopMode(rawValue: RunLoop.Mode.eventTracking.rawValue as CFString),4.2,false)
+   runTrackingLoop()
    keepAlive.invalidate()
    try? await Task.sleep(nanoseconds:1_000_000_000)
    write(["scenario":"4.2 seconds in eventTracking run loop","phase":monitor.state?.phase ?? "nil","reason":monitor.state?.reason ?? "nil","connected":monitor.connected,"expected":"running while visible local UI remains healthy","passed":monitor.state?.phase=="running" && monitor.connected])
@@ -34,6 +34,7 @@ final class AuditDelegate: NSObject, NSApplicationDelegate {
   monitor.shutdown();NSApp.terminate(nil)
  }
  func write(_ output:[String:Any]){let data=try! JSONSerialization.data(withJSONObject:output,options:[.sortedKeys]);try? data.write(to:root.appendingPathComponent("result.json"),options:.atomic)}
+ func runTrackingLoop() { CFRunLoopRunInMode(CFRunLoopMode(rawValue: RunLoop.Mode.eventTracking.rawValue as CFString),4.2,false) }
 }
 @main
 struct Main {

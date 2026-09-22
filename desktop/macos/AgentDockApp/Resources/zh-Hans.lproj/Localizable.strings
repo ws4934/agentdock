@@ -506,3 +506,12 @@
 "Sequence" = "连续操作";
 "Sequence complete" = "步骤执行完毕";
 "Sequence interrupted" = "步骤已中断";
+"Allow once" = "本次允许";
+"Always allow" = "始终允许";
+"Show preview" = "展开预览";
+"Hide preview" = "收起预览";
+"Change not applied" = "更改未生效";
+"Foreground" = "前台";
+"Background" = "后台";
+"Revoke" = "撤销";
+"Trusted applications" = "已信任的应用";
