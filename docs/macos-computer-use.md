@@ -51,7 +51,7 @@ AGENTDOCK_DESKTOP_ENABLED=true ./bin/agentdock --stdio
 | --- | --- | --- |
 | `desktop_task` | 声明、检查和结束当前 Core 的独占任务，返回私有 task_id | 任务控制状态 |
 | `desktop_wait` | 等待窗口或 AX 条件，不发送输入、不生成动作快照 | 否 |
-| `desktop_sequence` | 在一个后台窗口内执行有界 AX 步骤，每步重新观察，支持后置条件等待 | 是 |
+| `desktop_sequence` | 在一个后台窗口内连续点击、输入、按键、滚动或拖拽，按需读取 AX，结束后返回观察 | 是 |
 | `desktop_status` | 查询支持状态、启用开关、屏幕录制/辅助功能/Secure Input 状态 | 否，不触发授权 |
 | `desktop_permissions` | 经用户同意请求指定系统权限 | 可能显示系统弹窗 |
 | `desktop_launch` | 按应用名、Bundle ID 或绝对 .app 路径启动/复用应用，默认后台；有界等待窗口 | 是，应用/系统可能显示界面 |

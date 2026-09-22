@@ -22,53 +22,19 @@ func (s *Service) sequenceGuard(ctx context.Context, binding *observed) error {
 	if !s.control.valid(ctx, binding.epoch) {
 		return sequenceError("DESKTOP_CONTROL_BLOCKED")
 	}
-	p := s.backend.Permissions()
-	if !p.Accessibility {
+	if !s.backend.Permissions().Accessibility {
 		return permissionError("accessibility")
-	}
-	if p.SecureInput {
-		return sequenceError("SECURE_INPUT")
-	}
-	state, err := s.backend.State(ctx)
-	if err != nil {
-		return err
-	}
-	if state.WindowsTruncated || !sameBackgroundTarget(binding, state) {
-		return sequenceError("SEQUENCE_CONTEXT_CHANGED")
-	}
-	if state.FrontmostPID == binding.window.PID {
-		return sequenceError("TARGET_IN_USE")
-	}
-	// 新窗口/模态界面或标题变化需要重新判断；不能对旧计划继续盲点。
-	old := map[uint32]string{}
-	for _, w := range binding.state.Windows {
-		if w.PID == binding.window.PID {
-			old[w.ID] = w.Title
-		}
-	}
-	count := 0
-	for _, w := range state.Windows {
-		if w.PID != binding.window.PID {
-			continue
-		}
-		title, exists := old[w.ID]
-		if !exists || title != w.Title {
-			return sequenceError("SEQUENCE_CONTEXT_CHANGED")
-		}
-		count++
-	}
-	if count != len(old) {
-		return sequenceError("SEQUENCE_CONTEXT_CHANGED")
 	}
 	return nil
 }
 
-func (s *Service) sequenceObservation(ctx context.Context, binding *observed, screenshot bool) (core.Result, error) {
+func (s *Service) sequenceObservation(ctx context.Context, binding *observed, screenshot, accessibility bool) (core.Result, error) {
 	if err := s.sequenceGuard(ctx, binding); err != nil {
 		return nil, err
 	}
 	r := binding.options
 	r.PID, r.WindowID, r.Mode, r.Screenshot = binding.window.PID, binding.window.ID, "background", &screenshot
+	r.Accessibility = accessibility
 	result, err := s.snapshotBackgroundLocked(ctx, r)
 	if err != nil {
 		return nil, err
@@ -76,14 +42,25 @@ func (s *Service) sequenceObservation(ctx context.Context, binding *observed, sc
 	if err = s.sequenceGuard(ctx, binding); err != nil {
 		return nil, err
 	}
-	if result["tree_truncated"] == true {
-		return nil, sequenceError("SEQUENCE_TREE_INCOMPLETE")
+	// 复用快照已经读取的窗口状态，不再在每步前后重复枚举整台桌面。
+	state := result["state"].(State)
+	if !sameBackgroundTarget(binding, state) {
+		return nil, sequenceError("SEQUENCE_CONTEXT_CHANGED")
 	}
-	for _, e := range result["elements"].([]Element) {
-		if e.Role == "AXSheet" || e.Role == "AXDialog" {
-			return nil, sequenceError("SEQUENCE_CONTEXT_CHANGED")
+	if state.FrontmostPID == binding.window.PID {
+		return nil, sequenceError("TARGET_IN_USE")
+	}
+	// 标题更新、同应用其他窗口及普通弹层不等于目标已丢失。
+	// 控件身份由下一次 AX 定位验证；坐标输入由既有窗口绑定桥再次校验。
+	s.mu.Lock()
+	if s.latest != nil {
+		// 中间不截图，但 image 坐标继续使用初始图像的精确比例。
+		if !screenshot {
+			s.latest.image = binding.image
 		}
+		s.latest.options = binding.options
 	}
+	s.mu.Unlock()
 	return result, nil
 }
 
@@ -100,6 +77,9 @@ func sequenceMatches(observation core.Result, selector ElementSelector) (Element
 }
 
 func sequenceTarget(observation core.Result, step SequenceStep) (Element, error) {
+	if observation["tree_truncated"] == true {
+		return Element{}, sequenceError("SEQUENCE_TREE_INCOMPLETE")
+	}
 	e, count := sequenceMatches(observation, step.Element)
 	if count == 0 {
 		return e, sequenceError("SEQUENCE_ELEMENT_MISSING")
@@ -113,6 +93,17 @@ func sequenceTarget(observation core.Result, step SequenceStep) (Element, error)
 	return e, nil
 }
 
+func sequenceDelay(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return ctx.Err()
+	}
+}
+
 func (s *Service) sequenceWait(ctx context.Context, binding *observed, current core.Result, condition SequenceCondition, deadline time.Time) (core.Result, error) {
 	for {
 		if err := ctx.Err(); err != nil {
@@ -120,6 +111,10 @@ func (s *Service) sequenceWait(ctx context.Context, binding *observed, current c
 		}
 		if *condition.TimeoutMS > 0 && !time.Now().Before(deadline) {
 			return nil, sequenceError("SEQUENCE_CONDITION_TIMEOUT")
+		}
+		// 只有依赖唯一匹配或证明不存在的语义操作才要求树完整。
+		if current["tree_truncated"] == true {
+			return nil, sequenceError("SEQUENCE_TREE_INCOMPLETE")
 		}
 		e, count := sequenceMatches(current, condition.Element)
 		if count > 1 {
@@ -143,19 +138,14 @@ func (s *Service) sequenceWait(ctx context.Context, binding *observed, current c
 		if !time.Now().Before(deadline) {
 			return nil, sequenceError("SEQUENCE_CONDITION_TIMEOUT")
 		}
-		timer := time.NewTimer(min(100*time.Millisecond, time.Until(deadline)))
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return nil, ctx.Err()
-		case <-timer.C:
+		if err := sequenceDelay(ctx, min(100*time.Millisecond, time.Until(deadline))); err != nil {
+			return nil, err
 		}
 		var err error
-		current, err = s.sequenceObservation(ctx, binding, false)
+		current, err = s.sequenceObservation(ctx, binding, false, true)
 		if err != nil {
 			return nil, err
 		}
-		// 原生观察可能晚于谓词预算返回，不能将过期样本认作验证通过。
 		if !time.Now().Before(deadline) {
 			return nil, sequenceError("SEQUENCE_CONDITION_TIMEOUT")
 		}

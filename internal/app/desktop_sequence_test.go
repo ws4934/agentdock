@@ -83,4 +83,22 @@ func TestDesktopSequenceRuntimeContract(t *testing.T) {
 	if _, ok := newRuntimeValidationTestRuntime(t).ToolDefinition(desktop.ToolSequence); ok {
 		t.Fatal("sequence exposed while disabled")
 	}
+	before, err = r.Call(t.Context(), desktop.ToolSnapshot, map[string]any{"window_id": 9, "screenshot": false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mixed := []map[string]any{
+		{"action": "click", "point": map[string]any{"x": 120, "y": 80}, "click_count": 2},
+		{"action": "type", "text": "hello"},
+		{"action": "key", "key": "enter"},
+		{"action": "scroll", "point": map[string]any{"x": 120, "y": 80}, "delta_y": -100},
+		{"action": "drag", "path": []map[string]any{{"x": 120, "y": 80}, {"x": 150, "y": 90}}, "duration_ms": 16},
+		{"action": "wait", "duration_ms": 1},
+	}
+	result, err = r.Call(t.Context(), desktop.ToolSequence, map[string]any{"snapshot_id": before["snapshot_id"], "steps": mixed})
+	if err != nil || result["outcome"] != "completed" || result["completed_steps"] != 6 || result["dispatched_steps"] != 5 || result["_mcp_image_base64"] != nil {
+		t.Fatal("mixed action protocol failed", result, err)
+	}
+	assertToolResultMatchestestOutputSchema(t, desktop.ToolSequence, result)
+	assertToolResultMatchestestOutputSchema(t, desktop.ToolSnapshot, result["observation"].(Result))
 }

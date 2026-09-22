@@ -79,7 +79,7 @@ func TestSequenceRunsFiveInputsWithFreshSelectorsAndOneFinalImage(t *testing.T) 
 	if !reflect.DeepEqual(labels, []string{"1", "2", "+", "3", "="}) || len(b.events) != 0 {
 		t.Fatal(labels, b.events)
 	}
-	if len(b.captured) != 2 || b.treeReads != 8 {
+	if len(b.captured) != 2 || b.treeReads != 7 {
 		t.Fatalf("expected initial + final image and per-step AX, got captures=%d tree=%d", len(b.captured), b.treeReads)
 	}
 	obs := r["observation"].(core.Result)
@@ -123,7 +123,7 @@ func TestSequenceInheritsNoImageAndNeverStoresPlanText(t *testing.T) {
 }
 
 func TestSequencePrevalidatesAllStepsBeforeInput(t *testing.T) {
-	for _, fault := range []string{"empty", "too_many", "bad_tail", "role_only", "click_text", "null_text", "long_text", "bad_condition", "large_timeout", "nul_label"} {
+	for _, fault := range []string{"empty", "too_many", "bad_tail", "empty_selector", "click_text", "null_text", "long_text", "bad_condition", "large_timeout", "nul_label"} {
 		t.Run(fault, func(t *testing.T) {
 			b := sequenceFixture()
 			s := New(true, b)
@@ -133,11 +133,11 @@ func TestSequencePrevalidatesAllStepsBeforeInput(t *testing.T) {
 			case "empty":
 				r.Steps = nil
 			case "too_many":
-				r.Steps = make([]SequenceStep, 17)
+				r.Steps = make([]SequenceStep, maxSequenceSteps+1)
 			case "bad_tail":
 				r.Steps[4].Action = "key"
-			case "role_only":
-				r.Steps[4].Element.Title = nil
+			case "empty_selector":
+				r.Steps[4].Element = ElementSelector{}
 			case "click_text":
 				v := ""
 				r.Steps[4].Text = &v
@@ -150,7 +150,7 @@ func TestSequencePrevalidatesAllStepsBeforeInput(t *testing.T) {
 			case "bad_condition":
 				r.Steps[4].After = &SequenceCondition{Condition: "window_exists", Element: seqSelector("AXButton", "1")}
 			case "large_timeout":
-				r.TimeoutMS = 30001
+				r.TimeoutMS = maxSequenceTimeoutMS + 1
 			case "nul_label":
 				r.Steps[4].Element = seqSelector("AXButton", "x\x00")
 			}
@@ -204,6 +204,12 @@ func TestSequenceStopsOnChangedContextOrSelector(t *testing.T) {
 				return nil
 			}
 			r, err := s.Sequence(t.Context(), SequenceRequest{SnapshotID: id, Steps: seqSteps()})
+			if fault == "new_window" || fault == "title_change" || fault == "modal" || fault == "secure_input" || fault == "window_list" {
+				if err != nil || r["outcome"] != "completed" || len(b.inputs) != 5 || len(b.events) != 0 {
+					t.Fatal("irrelevant state change interrupted the target", r, err)
+				}
+				return
+			}
 			if err != nil || r["outcome"] != "interrupted" || len(b.inputs) != 1 || s.latest != nil || len(b.events) != 0 {
 				t.Fatal(r, err, b.inputs)
 			}
@@ -393,7 +399,13 @@ func TestSequenceRejectsOtherTaskAndUnsupportedSnapshot(t *testing.T) {
 			if mode == "expired" {
 				s.now = func() time.Time { return time.Now().Add(time.Minute) }
 			}
-			_, err = s.Sequence(t.Context(), SequenceRequest{SnapshotID: obs["snapshot_id"].(string), Steps: seqSteps()})
+			result, err := s.Sequence(t.Context(), SequenceRequest{SnapshotID: obs["snapshot_id"].(string), Steps: seqSteps()})
+			if mode == "no_ax" {
+				if err != nil || result["outcome"] != "completed" || len(b.inputs) != 5 {
+					t.Fatal("explicit selectors must enable on-demand AX", result, err)
+				}
+				return
+			}
 			if err == nil || len(b.inputs) != 0 {
 				t.Fatal("invalid observation authorized sequence")
 			}
@@ -449,8 +461,9 @@ func TestSequenceMonitorLossStopsTheRemainingPlan(t *testing.T) {
 	var offset atomic.Int64
 	base := time.Now()
 	s.control.now = func() time.Time { return base.Add(time.Duration(offset.Load())) }
-	s.RequireMonitor()
+	// 先建立监视器心跳，再启用租约；不能在心跳为空时读取 required 状态。
 	localPoll(t, s, s.control.status().ID)
+	s.RequireMonitor()
 	b.hook = func(context.Context, WindowInput) error {
 		offset.Store(int64(4 * time.Second))
 		return nil
