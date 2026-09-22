@@ -20,6 +20,7 @@ import (
 	toolcommand "github.com/uvwt/agentdock/internal/tool/command"
 	toolcontract "github.com/uvwt/agentdock/internal/tool/contract"
 	toolcore "github.com/uvwt/agentdock/internal/tool/core"
+	tooldesktop "github.com/uvwt/agentdock/internal/tool/desktop"
 	toolfile "github.com/uvwt/agentdock/internal/tool/file"
 	toolmcp "github.com/uvwt/agentdock/internal/tool/mcp"
 	toolmedia "github.com/uvwt/agentdock/internal/tool/media"
@@ -41,6 +42,7 @@ type Runtime struct {
 	files          *toolfile.Service
 	dynamicMCP     *toolmcp.Service
 	media          *toolmedia.Service
+	desktop        *tooldesktop.Service
 	browser        *toolbrowser.Service
 	recall         *toolrecall.Service
 	evolution      *evolution.Service
@@ -89,6 +91,7 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	runtime.command = toolcommand.New(func() config.Config { return runtime.cfg }, ws, envs, skills.ResolveActive, runtime.commandExecutionContext)
 	runtime.files = toolfile.New(ws, skills.ResolveResource, runtime.command.CommandEnv)
 	runtime.dynamicMCP = toolmcp.New(mcpClients, envs)
+	runtime.desktop = tooldesktop.New(cfg.DesktopEnabled, nil)
 	runtime.media = toolmedia.New(cfg, ws, runtime.command.InternalCommandEnv)
 	runtime.browser = toolbrowser.New(
 		toolbrowser.Config{AgentDockHome: cfg.AgentDockHome, ExecutablePath: cfg.BrowserExecutablePath, CDPURL: cfg.BrowserCDPURL, ReuseExistingCDP: cfg.BrowserReuseExistingCDP},
@@ -156,6 +159,11 @@ func (r *Runtime) Close() error {
 		}
 		if commandCancel != nil {
 			commandCancel()
+		}
+		if r.desktop != nil {
+			if err := r.desktop.Close(); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("close desktop runtime: %w", err))
+			}
 		}
 		if r.acp != nil {
 			if err := r.acp.Close(); err != nil {

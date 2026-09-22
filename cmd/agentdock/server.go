@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -99,9 +100,27 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 			slog.Warn("runtime close failed", "error", err)
 		}
 	}()
+	if cfg.DesktopEnabled {
+		runtime.RequireDesktopMonitor()
+	}
 	server := mcp.NewServer(runtime, cfg)
 	if cfg.Stdio {
-		return serveStdio(ctx, server)
+		if !cfg.DesktopEnabled {
+			return serveStdio(ctx, server)
+		}
+		root := strings.TrimSpace(os.Getenv("AGENTDOCK_RUNTIME_ROOT"))
+		if root == "" {
+			root = filepath.Join(cfg.AgentDockHome, "desktop-runtime")
+		}
+		controlCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		done := make(chan error, 2)
+		go func() { done <- serveStdio(controlCtx, server) }()
+		go func() { done <- desktopcontrol.Serve(controlCtx, root, runtime.LocalDesktopControl) }()
+		err := <-done
+		cancel()
+		<-done
+		return err
 	}
 	nexusStatus := &nexusbridge.ConnectionState{}
 	serviceCtx, cancelServices := context.WithCancel(ctx)
@@ -120,6 +139,9 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 		}()
 	}
 	runtimeRoot := strings.TrimSpace(os.Getenv("AGENTDOCK_RUNTIME_ROOT"))
+	if runtimeRoot == "" && cfg.DesktopEnabled {
+		runtimeRoot = filepath.Join(cfg.AgentDockHome, "desktop-runtime")
+	}
 	if runtimeRoot == "" {
 		return httpx.Serve(serviceCtx, server, runtime, cfg)
 	}
@@ -130,6 +152,9 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 	go func() { done <- httpx.Serve(serviceCtx, server, runtime, cfg) }()
 	go func() {
 		done <- desktopcontrol.Serve(serviceCtx, runtimeRoot, func(controlCtx context.Context, request desktopcontrol.Request) (any, error) {
+			if strings.HasPrefix(request.Method, "computeruse.") {
+				return runtime.LocalDesktopControl(controlCtx, request)
+			}
 			return desktopruntime.DispatchControlRequest(
 				controlCtx,
 				request,

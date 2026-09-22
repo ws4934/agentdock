@@ -16,6 +16,15 @@ trap cleanup EXIT
 
 python3 "$ROOT_DIR/scripts/test/check-macos-i18n.py"
 
+swiftc -swift-version 5 -parse-as-library \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/Localization.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ComputerUseTransport.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ComputerUsePreview.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Tests/ComputerUsePreviewTests.swift" \
+  -o "$TMP_ROOT/computer-use-preview-tests"
+"$TMP_ROOT/computer-use-preview-tests"
+
+
 swiftc \
   -swift-version 5 \
   -parse-as-library \
@@ -90,7 +99,7 @@ payload_build="$TMP_ROOT/offline-build"
 mkdir -p "$payload_dir" "$payload_build/bin" "$payload_build/share/agentdock"
 (
   cd "$ROOT_DIR"
-  CGO_ENABLED=0 GOOS=darwin GOARCH="$release_arch" \
+  CGO_ENABLED=1 GOOS=darwin GOARCH="$release_arch" \
     go build -trimpath -o "$payload_build/bin/agentdock" ./cmd/agentdock
 )
 python3 "$ROOT_DIR/packaging/build-core-skill-bundle.py" \

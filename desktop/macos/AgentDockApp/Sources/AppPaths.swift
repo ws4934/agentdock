@@ -39,6 +39,7 @@ struct ServiceConfiguration: Equatable {
         "AGENTDOCK_PORT",
         "AGENTDOCK_LOG_LEVEL",
         "AGENTDOCK_MCP_APPS_ENABLED",
+        "AGENTDOCK_DESKTOP_ENABLED",
         "AGENTDOCK_BROWSER_ENABLED",
         "AGENTDOCK_BROWSER_CDP_URL",
         "AGENTDOCK_BROWSER_REUSE_EXISTING_CDP",
@@ -64,6 +65,7 @@ struct ServiceConfiguration: Equatable {
     let oauthPassword: String
     let logLevel: String
     let mcpAppsEnabled: Bool
+    var desktopEnabled: Bool = false
     let browserEnabled: Bool
     let browserCDPURL: String
     let browserReuseExistingCDP: Bool
@@ -137,6 +139,7 @@ struct ServiceConfiguration: Equatable {
             oauthPassword: values["AGENTDOCK_OAUTH_PASSWORD"] ?? "",
             logLevel: normalizedLogLevel(values["AGENTDOCK_LOG_LEVEL"] ?? "info"),
             mcpAppsEnabled: parseBool(values["AGENTDOCK_MCP_APPS_ENABLED"], defaultValue: true),
+            desktopEnabled: parseBool(values["AGENTDOCK_DESKTOP_ENABLED"]),
             browserEnabled: parseBool(values["AGENTDOCK_BROWSER_ENABLED"]),
             browserCDPURL: values["AGENTDOCK_BROWSER_CDP_URL"] ?? "",
             browserReuseExistingCDP: parseBool(values["AGENTDOCK_BROWSER_REUSE_EXISTING_CDP"]),

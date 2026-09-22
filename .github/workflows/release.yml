@@ -83,7 +83,8 @@ jobs:
 
       - name: Build and package
         env:
-          CGO_ENABLED: '0'
+          CGO_ENABLED: '1'
+          MACOSX_DEPLOYMENT_TARGET: '13.0'
           GOOS: darwin
           GOARCH: ${{ matrix.goarch }}
         run: |

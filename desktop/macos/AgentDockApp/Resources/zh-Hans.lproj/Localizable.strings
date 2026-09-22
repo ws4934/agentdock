@@ -357,3 +357,121 @@
 "Command" = "命令";
 "Args JSON" = "参数 JSON";
 "Save" = "保存";
+
+/* Native Computer Use */
+"Enable native macOS Computer Use" = "启用原生 macOS 桌面控制";
+"Requires macOS 14+, Accessibility and Screen Recording. Visible screen content is sent to your connected AI client." = "需要 macOS 14+、辅助功能和屏幕录制权限。屏幕可见内容将发送给你连接的 AI 客户端。";
+
+"Computer Use" = "电脑操作";
+
+"Preview needs Screen Recording permission." = "预览需要屏幕录制权限。";
+
+"Target window is unavailable." = "目标窗口当前不可用。";
+
+"Waiting for live preview…" = "等待实时画面…";
+
+"Live preview is unavailable. Control can still be stopped." = "实时预览不可用，仍可停止控制。";
+
+"Live preview stopped. Control can still be stopped." = "实时预览已中断，仍可停止控制。";
+
+"Live window preview · local only" = "实时窗口预览 · 仅在本机显示";
+
+"Stop and close" = "停止并关闭";
+
+"Collapse" = "收起";
+
+"Connection lost. The core pauses when the monitor lease expires." = "连接已中断，监视租约到期后核心会暂停控制。";
+
+"Stop not yet confirmed" = "停止尚未确认";
+
+"Waiting for next action" = "等待下一步操作";
+
+"Pausing · releasing input…" = "正在暂停 · 释放输入中…";
+
+"Stopping · releasing input…" = "正在停止 · 释放输入中…";
+
+"Paused after monitor disconnected" = "监视器断连，控制已暂停";
+
+"Paused" = "已暂停";
+
+"Ready for a new task" = "准备接受新任务";
+
+"Foreground control" = "前台控制";
+
+"Background window" = "后台窗口";
+
+"Resume with fresh observation" = "恢复并重新观察";
+
+"Pause" = "暂停";
+
+"Stops desktop control only, not other agent tools." = "仅停止桌面控制，不终止其他工具任务。";
+
+"Frame unchanged · window may be static or minimized" = "画面暂无更新 · 窗口可能静止或已最小化";
+
+"Opening application" = "正在打开应用";
+
+"Observing window" = "正在观察窗口";
+
+"Entering input" = "正在输入";
+
+"Clicking" = "正在点击";
+
+"Dragging" = "正在拖拽";
+
+"Scrolling" = "正在滚动";
+
+"Operating window" = "正在操作窗口";
+
+"Show Computer Use" = "显示电脑操作";
+
+"Stop desktop control" = "停止桌面控制";
+
+"Resume" = "恢复";
+
+"Waiting for permission" = "等待用户授权";
+
+"Input cleanup failed · manual check required" = "输入清理失败 · 需要人工检查";
+
+"Confirm manual cleanup" = "确认人工清理";
+
+"Check that all mouse buttons and keys are released. This acknowledges manual cleanup; it does not resume the task." = "请确认所有鼠标按键和键盘按键均已释放。这只确认人工清理，不会恢复任务。";
+
+"I checked the input state" = "我已检查输入状态";
+
+"Retry preview" = "重新尝试预览";
+
+"Allow for this task" = "允许本次任务";
+
+"Deny" = "拒绝";
+
+"Next step" = "执行下一步";
+
+"Application access requires your approval" = "应用访问需要你批准";
+
+"Foreground control can affect the desktop." = "前台控制可能影响整个桌面。";
+
+"Waiting for application approval" = "等待应用授权";
+
+"Waiting for a verified condition" = "等待可验证条件";
+
+"End and release desktop task" = "结束并释放桌面任务";
+
+"Emergency stop: Control-Option-Command-F12" = "紧急停止：Control-Option-Command-F12";
+
+"Emergency shortcut registered" = "紧急停止快捷键已注册";
+
+"Shortcut unavailable; use Stop and close" = "快捷键不可用，请使用停止并关闭";
+
+"Input dispatched" = "已发送输入";
+
+"Condition verified" = "条件已验证";
+
+"Condition timed out" = "等待条件超时";
+
+"Input cleanup failed" = "输入清理失败";
+
+"Cancelled" = "已取消";
+
+"Failed or partially executed" = "失败或部分执行";
+
+"Finished · result not verified" = "已结束 · 结果未验证";

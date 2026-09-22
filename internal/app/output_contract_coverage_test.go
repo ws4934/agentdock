@@ -15,6 +15,13 @@ type outputContractCoverageEntry struct {
 // 这里登记公开 MCP 工具已经被真实 outputSchema 校验覆盖的成功路径。
 // ToolDefinitions 是公开工具定义的单一事实源，tools/list 从同一 registry 派生；新增工具但忘记补契约测试时，门禁会直接失败。
 var outputContractCoverageInventory = map[string]outputContractCoverageEntry{
+	"desktop_wait":             {Variants: []string{"success"}},
+	"desktop_task":             {Variants: []string{"begin", "status", "end"}},
+	"desktop_launch":           {Variants: []string{"success"}},
+	"desktop_status":           {Variants: []string{"success"}},
+	"desktop_permissions":      {Variants: []string{"success"}},
+	"desktop_snapshot":         {Variants: []string{"success"}},
+	"desktop_act":              {Variants: []string{"activate", "click", "move", "drag", "scroll", "key", "type", "set_value"}},
 	"agentdock_context":        {Variants: []string{"success"}},
 	"read_file":                {Variants: []string{"success"}},
 	"list_dir":                 {Variants: []string{"success"}},

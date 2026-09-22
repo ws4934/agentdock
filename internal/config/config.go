@@ -45,6 +45,7 @@ type Config struct {
 	NexusDeviceToken             string
 	MCPAppsEnabled               bool
 	BrowserEnabled               bool
+	DesktopEnabled               bool
 	BrowserExecutablePath        string
 	BrowserCDPURL                string
 	BrowserReuseExistingCDP      bool
@@ -73,6 +74,10 @@ type ACPProfile struct {
 
 func FromEnv() (Config, error) {
 	port, err := getenvInt("AGENTDOCK_PORT", 8765)
+	if err != nil {
+		return Config{}, err
+	}
+	desktopEnabled, err := getenvBool("AGENTDOCK_DESKTOP_ENABLED", false)
 	if err != nil {
 		return Config{}, err
 	}
@@ -152,6 +157,7 @@ func FromEnv() (Config, error) {
 		LogLevel:                     getenv("AGENTDOCK_LOG_LEVEL", "info"),
 		MCPAppsEnabled:               mcpAppsEnabled,
 		BrowserEnabled:               browserEnabled,
+		DesktopEnabled:               desktopEnabled,
 		BrowserExecutablePath:        os.Getenv("AGENTDOCK_BROWSER_EXECUTABLE_PATH"),
 		BrowserCDPURL:                strings.TrimSpace(os.Getenv("AGENTDOCK_BROWSER_CDP_URL")),
 		BrowserReuseExistingCDP:      browserReuseExistingCDP,

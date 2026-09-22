@@ -238,3 +238,17 @@ Apache License 2.0. See [LICENSE](./LICENSE).
 ## Community
 
 [Join the QQ group (1081337019)](https://qun.qq.com/universal-share/share?ac=1&authKey=Rp86bSzI7vqm87KoYlKawgsPZ440Ubhyezw6Qkgcn3JISwX3zXxsXkbS5598RrY5&busi_data=eyJncm91cENvZGUiOiIxMDgxMzM3MDE5IiwidG9rZW4iOiJ0Mlg1bUU1ZWtuZzF3SHJDT3pSaGsrOURIMlNYaXBlYllOUjNLZ1BUb1hzM2lJSTZjeVNldzU0ajl0SjRVZkx2IiwidWluIjoiMzIwMjA4ODAzMiJ9&data=W28mWvuqaLf_Fwnf0CgAJXuDs6l3A78V7AoWZnizPboCpKoQMzHzZ-UlluYo47U3tmIBHK2xIgWEVEJbTiGsPQ&svctype=4&tempid=h5_group_info)
+
+## Native macOS Computer Use
+
+Desktop calls now use an exclusive `desktop_task` capability, local per-task application/mode approval and read-only `desktop_wait` predicates. Stop/pause intentions survive transient IPC loss, input-release failures stay blocked for manual acknowledgment, and the panel provides single-step execution and bounded operation history. See [reliable execution and task scope](docs/computer-use-reliability.md).
+
+An opt-in native desktop capability for macOS 14+: screenshots, displays/windows, Accessibility elements, pointer actions, dragging, scrolling, shortcuts, and Unicode typing. The implementation uses Go plus a thin system API bridge, not a Skill, Python, AppleScript, or a Codex MCP dependency. Enable it in the Mac advanced settings or set `AGENTDOCK_DESKTOP_ENABLED=true`; macOS builds require CGO.
+
+Use `desktop_launch` to open an installed app by exact name, bundle ID, or absolute `.app` path (background by default, existing instances reused), then observe a returned window before acting. Launch and window readiness are reported separately; there is no automatic relaunch or foreground fallback.
+
+The default observation only discovers windows. Select a window for background capture and directed input; foreground takeover requires explicit `mode: foreground` and is never an automatic fallback. Background pointer routing has an optional private macOS coordinate bridge and requires revalidation after system upgrades; this is not a virtual desktop.
+
+See [desktop control, permissions, and verification](docs/macos-computer-use.md).
+
+Computer Use now includes a non-activating live window preview with local pause/resume, stop-on-close, a collapsed menu-bar indicator, and fail-closed monitor leases. The matching menu-bar app must be running; [monitor design and setup](docs/computer-use-monitor.md).

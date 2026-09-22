@@ -57,6 +57,13 @@ scripts:
     public_contract: false
     deletable: true
 
+  - path: scripts/test/test-computer-use-faults.py
+    class: test
+    owner: desktop
+    public_contract: false
+    deletable: true
+    notes: 专用本地socket故障测试，验证停止意图和菜单跟踪心跳；仅驱动测试面板，不连接安装宿主或发送桌面输入。
+
   - path: scripts/test/test_shell_variable_boundaries.py
     class: test
     owner: ci

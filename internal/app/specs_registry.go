@@ -13,6 +13,7 @@ func buildToolSpecs() []ToolSpec {
 	specs = append(specs, workflowToolSpecs()...)
 	specs = append(specs, skillToolSpecs()...)
 	specs = append(specs, dynamicMCPToolSpecs()...)
+	specs = append(specs, desktopToolSpecs()...)
 	specs = append(specs, imageToolSpecs()...)
 	specs = append(specs, recallToolSpecs()...)
 	specs = append(specs, browserToolSpecs()...)

@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let service = ServiceController()
+    private lazy var computerUse = ComputerUseMonitor(runtimeRoot: ProcessInfo.processInfo.environment["AGENTDOCK_MONITOR_RUNTIME_ROOT"].map { URL(fileURLWithPath: $0) } ?? service.paths.appSupport)
     private let menuLoginAgent = MenuLoginAgentController()
     private let launchedInBackground = CommandLine.arguments.contains("--background")
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -28,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let pendingUpdateResult = DesktopUpdateResult.load(from: service.paths.updateResult)
         let updateResultExists = FileManager.default.fileExists(atPath: service.paths.updateResult.path)
         configureStatusItem()
+        computerUse.start()
         if !recoveryReady {
             // Do not acknowledge or clear any pending transaction when crash recovery itself
             // could not establish a safe state. The journal remains intact for repair/retry.
@@ -77,11 +79,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        computerUse.shutdown()
         timer?.invalidate()
     }
 
     private func setUpdateInProgress(_ inProgress: Bool) {
         isUpdating = inProgress
+        if inProgress { computerUse.stopAndClose() }
         ApplicationMenu.setQuitEnabled(!inProgress)
         setupWindow.setUpdateInProgress(inProgress)
         rebuildMenu()

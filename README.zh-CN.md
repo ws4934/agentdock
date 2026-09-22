@@ -241,3 +241,17 @@ Apache License 2.0. See [LICENSE](./LICENSE).
 ## 交流反馈
 
 [加入 QQ 群（1081337019）](https://qun.qq.com/universal-share/share?ac=1&authKey=Rp86bSzI7vqm87KoYlKawgsPZ440Ubhyezw6Qkgcn3JISwX3zXxsXkbS5598RrY5&busi_data=eyJncm91cENvZGUiOiIxMDgxMzM3MDE5IiwidG9rZW4iOiJ0Mlg1bUU1ZWtuZzF3SHJDT3pSaGsrOURIMlNYaXBlYllOUjNLZ1BUb1hzM2lJSTZjeVNldzU0ajl0SjRVZkx2IiwidWluIjoiMzIwMjA4ODAzMiJ9&data=W28mWvuqaLf_Fwnf0CgAJXuDs6l3A78V7AoWZnizPboCpKoQMzHzZ-UlluYo47U3tmIBHK2xIgWEVEJbTiGsPQ&svctype=4&tempid=h5_group_info)
+
+## 原生 macOS Computer Use
+
+桌面调用现在要求 `desktop_task` 独占任务令牌和本机按任务的应用/模式授权；`desktop_wait` 只观察明确条件，不重放输入。停止/暂停意图跨瞬时通信故障保留，输入释放失败锁存；本机面板新增单步执行和有界操作时间线。详见[可靠执行与任务范围](docs/computer-use-reliability.md)。
+
+macOS 14+ 可选启用内置桌面观察与控制：截图、显示器/窗口信息、Accessibility 控件、鼠标、拖拽、滚动、快捷键及 Unicode 输入。核心为 Go + 系统 API，不依赖 Skill、Python、AppleScript 或 Codex MCP。功能默认关闭，在 Mac 高级设置中启用，或设置 `AGENTDOCK_DESKTOP_ENABLED=true`；macOS 构建需要 CGO。
+
+可先用 `desktop_launch` 按应用名、Bundle ID 或绝对 `.app` 路径主动打开应用（默认后台，复用已运行实例），取得 PID/窗口后再观察和操作。启动与窗口就绪分开报告，超时不自动重启或切换前台。
+
+默认只发现窗口；选定窗口后进行后台截图和定向输入。前台接管必须显式 `mode:foreground`，后台失败绝不自动接管。后台指针依赖可检测的非公开窗口坐标桥，系统升级后需要重验，不等同于虚拟桌面。
+
+详见 [原生桌面控制、权限与验收说明](docs/macos-computer-use.md)。
+
+Computer Use 现已提供不抢焦点的实时窗口预览、本机暂停/恢复、关窗停止、收起后的菜单栏指示和断连暂停。正式桌面控制要求同版本菜单栏应用在线；详见[实时控制窗设计与使用](docs/computer-use-monitor.md)。
