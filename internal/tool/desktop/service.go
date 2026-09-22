@@ -25,6 +25,7 @@ const snapshotTTL = 30 * time.Second
 var desktopGate = make(chan struct{}, 1)
 
 type observed struct {
+	epoch    uint64
 	mode     string
 	window   Window
 	id       string
@@ -35,6 +36,7 @@ type observed struct {
 	elements map[string]Element
 }
 type Service struct {
+	control  *controlSession
 	backend  Backend
 	enabled  bool
 	mu       sync.Mutex
@@ -51,11 +53,12 @@ func New(enabled bool, backend Backend) *Service {
 		backend = NewBackend()
 	}
 	lifetime, cancel := context.WithCancel(context.Background())
-	return &Service{backend: backend, enabled: enabled, now: time.Now, lifetime: lifetime, cancel: cancel}
+	return &Service{control: newControlSession(enabled), backend: backend, enabled: enabled, now: time.Now, lifetime: lifetime, cancel: cancel}
 }
 
 // Close 取消等待及执行中的操作，并等待鼠标释放等清理结束。
 func (s *Service) Close() error {
+	s.control.close()
 	s.mu.Lock()
 	s.closed = true
 	s.latest = nil
@@ -82,6 +85,7 @@ func (s *Service) Status(context.Context) (core.Result, error) {
 		pointerAvailable = b.BackgroundPointerAvailable()
 	}
 	return core.Result{
+		"control_session":    s.control.status(),
 		"background_pointer": map[string]any{"available": pointerAvailable && s.backend.Supported(), "requires_private_api": true, "symbol": "CGEventSetWindowLocation", "fallback": "none", "stability": "macOS updates require revalidation; AX operations do not depend on this bridge"},
 		"enabled":            s.enabled, "supported": s.backend.Supported(), "platform": runtime.GOOS,
 		"permissions": s.backend.Permissions(), "minimum_macos": "14.0",
@@ -115,10 +119,16 @@ func (s *Service) RequestPermission(ctx context.Context, r PermissionRequest) (c
 	if r.Permission != "accessibility" && r.Permission != "screen_recording" {
 		return nil, invalid("permission must be accessibility or screen_recording")
 	}
+	ctx, release, controlErr := s.controlled(ctx, "permissions")
+	if controlErr != nil {
+		return nil, controlErr
+	}
+	defer release()
 	if err := lockDesktop(ctx); err != nil {
 		return nil, err
 	}
 	defer unlockDesktop()
+	s.control.started(ctx)
 	if err := s.backend.RequestPermission(r.Permission); err != nil {
 		return nil, err
 	}
@@ -171,6 +181,11 @@ func (s *Service) Snapshot(ctx context.Context, r SnapshotRequest) (core.Result,
 	if r.Mode != "foreground" || r.WindowID != 0 || r.PID != 0 {
 		return nil, invalid("mode must be background or foreground; foreground does not accept window_id/pid")
 	}
+	ctx, release, controlErr := s.controlled(ctx, "snapshot")
+	if controlErr != nil {
+		return nil, controlErr
+	}
+	defer release()
 	screenshot := r.Screenshot == nil || *r.Screenshot
 	p := s.backend.Permissions()
 	if screenshot && !p.ScreenRecording {
@@ -183,6 +198,7 @@ func (s *Service) Snapshot(ctx context.Context, r SnapshotRequest) (core.Result,
 		return nil, err
 	}
 	defer unlockDesktop()
+	s.control.started(ctx)
 	s.invalidate()
 	state, err := s.backend.State(ctx)
 	if err != nil {
@@ -190,6 +206,9 @@ func (s *Service) Snapshot(ctx context.Context, r SnapshotRequest) (core.Result,
 	}
 	if state.FrontmostPID <= 0 {
 		return nil, core.NewError("NO_DESKTOP_SESSION", "No foreground application is available; ensure an interactive desktop and retry after focus settles", "desktop")
+	}
+	if w, ok := targetWindow(state); ok {
+		s.recordTarget(ctx, state, w, "foreground")
 	}
 	var display Display
 	for _, d := range state.Displays {
@@ -232,7 +251,7 @@ func (s *Service) Snapshot(ctx context.Context, r SnapshotRequest) (core.Result,
 	if _, err := rand.Read(random); err != nil {
 		return nil, err
 	}
-	obs := &observed{id: hex.EncodeToString(random), at: s.now(), state: state, display: display, image: Capture{Width: capture.Width, Height: capture.Height}, elements: map[string]Element{}}
+	obs := &observed{epoch: s.control.epoch(ctx), id: hex.EncodeToString(random), at: s.now(), state: state, display: display, image: Capture{Width: capture.Width, Height: capture.Height}, elements: map[string]Element{}}
 	publicElements := make([]Element, 0, len(tree.Elements))
 	for i, e := range tree.Elements {
 		e.ID = fmt.Sprintf("e%d", i+1)
@@ -281,14 +300,20 @@ func (s *Service) Act(ctx context.Context, r ActionRequest) (result core.Result,
 	if err = validateAction(r); err != nil {
 		return nil, err
 	}
+	ctx, release, controlErr := s.controlled(ctx, r.Action)
+	if controlErr != nil {
+		return nil, controlErr
+	}
+	defer release()
 	if err = lockDesktop(ctx); err != nil {
 		return nil, err
 	}
 	defer unlockDesktop()
+	s.control.started(ctx)
 	s.mu.Lock()
 	obs := s.latest
 	s.mu.Unlock()
-	if obs == nil || r.SnapshotID != obs.id || s.now().Sub(obs.at) > snapshotTTL {
+	if obs == nil || r.SnapshotID != obs.id || s.now().Sub(obs.at) > snapshotTTL || obs.epoch != 0 && !s.control.valid(ctx, obs.epoch) {
 		return nil, stale("Snapshot is absent, expired, or consumed; call desktop_snapshot before each action")
 	}
 	p := s.backend.Permissions()
@@ -370,6 +395,9 @@ func (s *Service) Act(ctx context.Context, r ActionRequest) (result core.Result,
 			err = core.NewErrorDetails("DESKTOP_ACTION_FAILED", err.Error(), "desktop", map[string]any{"action": r.Action, "may_have_dispatched": true, "retry_instruction": "Observe the desktop again; do not automatically replay this action."})
 		}
 	}()
+	if r.Point != nil {
+		s.control.pointer(ctx, point)
+	}
 	pid := obs.state.FrontmostPID
 	button := 0
 	if r.Button == "right" {

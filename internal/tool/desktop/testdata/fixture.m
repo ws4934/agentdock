@@ -32,7 +32,7 @@
 -(BOOL)acceptsFirstResponder{return YES;}
 // 这个验收画布明确支持后台首次点击；真实第三方控件可以拒绝，工具不能强行绕过。
 -(BOOL)acceptsFirstMouse:(NSEvent *)event{return YES;}
--(void)drawRect:(NSRect)dirtyRect{[(self.owner.background?[NSColor colorWithSRGBRed:0.1 green:0.3 blue:0.8 alpha:1]:[NSColor colorWithSRGBRed:0.8 green:0.2 blue:0.1 alpha:1]) setFill];NSRectFill(self.bounds);[@"Isolated drag and scroll target" drawAtPoint:NSMakePoint(12,25) withAttributes:nil];}
+-(void)drawRect:(NSRect)dirtyRect{[(self.owner.background?[NSColor colorWithSRGBRed:0.1 green:0.3 blue:0.8 alpha:1]:[NSColor colorWithSRGBRed:0.8 green:0.2 blue:0.1 alpha:1]) setFill];NSRectFill(self.bounds);[(NSProcessInfo.processInfo.environment[@"AGENTDOCK_FIXTURE_ANIMATE"]? [NSString stringWithFormat:@"Live fixture %.1f",NSProcessInfo.processInfo.systemUptime]:@"Isolated drag and scroll target") drawAtPoint:NSMakePoint(12,25) withAttributes:nil];}
 -(void)mouseDown:(NSEvent *)event{self.owner.downs++;[self.owner save];}
 -(void)mouseDragged:(NSEvent *)event{self.owner.drags++;[self.owner save];}
 -(void)mouseUp:(NSEvent *)event{self.owner.releases++;[self.owner save];}
@@ -75,7 +75,7 @@
   if(event.type==NSEventTypeMouseMoved){if(self.background)self.moves++;}else if(event.type==NSEventTypeKeyDown){self.keyEvents++;self.lastKeyCode=event.keyCode;self.lastKeyLength=event.characters.length;self.lastKeyFlags=event.modifierFlags;}else{self.mouseEvents++;self.lastEventWindow=(int)event.windowNumber;self.lastEventLocation=event.locationInWindow;}
   [self save];return event;
  }];
- [NSTimer scheduledTimerWithTimeInterval:0.05 repeats:YES block:^(NSTimer *timer){[self save];}];
+ [NSTimer scheduledTimerWithTimeInterval:0.05 repeats:YES block:^(NSTimer *timer){if(NSProcessInfo.processInfo.environment[@"AGENTDOCK_FIXTURE_ANIMATE"])self.canvas.needsDisplay=YES;[self save];}];
  [self save];
 }
 @end

@@ -1,5 +1,44 @@
 # macOS Computer Use 验收记录
 
+## 最新：实时控制窗与停止会话（2026-09-21）
+
+基线 `335cc3c`；分支 `feat/native-macos-computer-use`。设计与本机协议详见 [computer-use-monitor.md](computer-use-monitor.md)。本轮没有更新或重启正在提供连接的宿主。
+
+### 本轮交付
+
+新增 Swift 原生非激活控制窗、独立 ScreenCaptureKit 窗口预览、虚拟指针、暂停/恢复、关闭即停止、收起后菜单栏控制。Go Core 新增共享桌面会话、代次校验、取消/清理状态、3 秒监视租约及 60 秒空闲结束。正式宿主要求本机控制器在线并确认显示；MCP 不提供恢复入口。已有活动的本地控制 socket 不允许被另一个 Core 夺取，只有确认失效的 socket 才可恢复。
+
+### 最终实测
+
+环境：macOS 27.0（26A428）、Apple Silicon、Go 1.26.5、CLT SDK 26.5。本轮记录位于 `.git/computer-use/monitor/`，不加入 Git。以下输入测试均实际执行，没有跳过；先前轮次的结果保留在后文，不混记为本轮结果。
+
+| 检查 | 结果 |
+| --- | --- |
+| 原生控制窗端到端 | `TestNativeComputerUseMonitor -count=2` 连续两次通过，16.36 秒 / 14.18 秒，`gui-final.exit=0`。 |
+| 既有后台与前台输入 | `TestNativeBackgroundTwoApplications`、`TestNativeBackgroundForegroundRefusal`、`TestNativeInputIsolatedFixture` 全部真实通过，`input.exit=0`。 |
+| 应用启动→观察→操作 | `TestNativeDesktopLaunchMCPFlow` 真实通过，含实例复用与显式前台激活，`launch.exit=0`。 |
+| 原生只读与 MCP 图像 | `TestNativeReadOnlyDesktop`、`TestNativeApplicationResolution`、`TestNativeDesktopMCPImage` 全部真实通过，`readonly.exit=0`。 |
+| 全仓库 race / vet | `go test -race ./... -count=1 -timeout=3m` 与 `go vet ./...` 均退出 0。 |
+| 无 CGO 回归 | desktop/app/mcp 通过，`nocgo.exit=0`。 |
+| 原生与交叉构建 | macOS arm64/amd64 CGO、Linux/Windows amd64 无 CGO 构建全部通过。实际 GUI 测试只在 arm64 上运行。 |
+| Mac 应用打包 | `scripts/test/test-macos-app.sh` 通过，包括 Swift、395 项中英本地化条目、原生 Core 打包、ad-hoc 签名验证及 DMG/ZIP 测试；不是 Developer ID 公证发布。 |
+| 工作区与格式 | `git diff --check`、gofmt 与本地化检查通过。长命令均在 tmux detached 中完成。 |
+
+端到端测试使用真实 Swift 面板进程、带动画的后台目标、前台哨兵、Unix socket 和 Go 核心。确认：面板自动出现、至少三帧独立视频、模型快照 ID 不变、面板不成为前台/key/main 窗口；收起四秒后控制租约仍在，重新展开可恢复画面；暂停/恢复使旧快照失效；真实调用窗口关闭行为时取消进行中的拖拽、向原窗口释放按钮，活动数归零后才确认停止并隐藏窗口；杀死测试面板进程后核心自动暂停，重新调用截图无法解除暂停。
+
+只读鼠标来源观察器确认没有非硬件合成事件进入全局鼠标流，前台窗口/焦点/文本/键盘和鼠标计数不变；最终两次运行各记录 0 次外部硬件鼠标移动。第一次试验仅比较起止鼠标位置，被实际位置变化触发失败；该记录保留为 `gui-attempt1.log`，随后改用来源监测，不通过放宽断言掩盖自动化干扰。
+
+已查看实际运行面板的窗口截图 `panel.jpg`，核验应用标题、状态、实时预览、收起、暂停和停止按钮的布局。最初的 view cache 图片遗漏系统绘制控件，未用它判断布局；最终图片由 ScreenCaptureKit 捕获专用测试面板。仅测试面板开放这一截图，生产面板保持原有分享限制，测试图片没有公开发布。
+
+### 限制与部署状态
+
+Core 与菜单栏应用必须配套更新；独立 CLI 也需要连接本机监视器，不能沿用只有旧 Core 的“无监视输入”方式。当前运行中的旧宿主保持不变，本轮没有安装、重启、修改 TCC 或发布正式 Release。
+
+状态按单个 Core 进程共享，不按模型 turn 分隔；停止针对该进程的所有桌面操作，而非模型推理或其他工具。会话代次和停止锁存在该 Core 进程内，不是跨进程持久化的任务授权系统。已递交给系统的动作不可撤回，原生调用完成前显示清理中。监视窗口与预览不增加私有接口；既有后台鼠标坐标桥的私有 API、AppKit 后台控件兼容、其他系统版本/多显示器/Intel 真机的验证限制仍然存在。
+
+---
+
+
 ## 最新验收：主动启动应用与完整输入重验（2026-09-21）
 
 基线：`a93aa29`。分支：`feat/native-macos-computer-use`。本轮新增 `desktop_launch`，同时重新执行此前因安全输入/桌面状态而未完成的后台和前台输入验收。**下表中的真实 GUI 测试全部实际执行通过，没有跳过；历史章节中的阻挡记录只描述当时状态，不是当前未完成项。**

@@ -85,7 +85,7 @@ func OutputSchema(name string) (map[string]any, bool) {
 	switch name {
 	case ToolStatus, ToolPermissions:
 		return contract.OutputObject(map[string]any{
-			"background_pointer": contract.OpenObject("Native pointer bridge availability, private API dependency and upgrade stability."), "default_mode": contract.String("Default desktop mode."), "background_policy": contract.String("Background safety and compatibility boundary."),
+			"control_session": contract.OpenObject("Local Computer Use session, monitor connection and pause/stop state. Local-only controls; model cannot resume."), "background_pointer": contract.OpenObject("Native pointer bridge availability, private API dependency and upgrade stability."), "default_mode": contract.String("Default desktop mode."), "background_policy": contract.String("Background safety and compatibility boundary."),
 			"enabled": contract.Boolean("Desktop capability is explicitly enabled."), "supported": contract.Boolean("Native backend is available."), "platform": contract.String("Host GOOS."),
 			"permissions":    contract.OutputObject(map[string]any{"screen_recording": contract.Boolean("Screen Recording granted."), "accessibility": contract.Boolean("Accessibility granted."), "secure_input": contract.Boolean("Secure Input active.")}, "screen_recording", "accessibility", "secure_input"),
 			"enable_setting": contract.String("Host environment setting."), "minimum_macos": contract.String("Minimum supported macOS version."), "permission_help": contract.String("User-facing authorization instructions."), "requested": contract.String("Permission requested, only in desktop_permissions."),

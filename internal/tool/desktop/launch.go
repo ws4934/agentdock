@@ -93,6 +93,11 @@ func (s *Service) Launch(ctx context.Context, r LaunchRequest) (core.Result, err
 	if err != nil {
 		return nil, err
 	}
+	ctx, release, controlErr := s.controlled(ctx, "launch")
+	if controlErr != nil {
+		return nil, controlErr
+	}
+	defer release()
 	backend, ok := s.backend.(ApplicationBackend)
 	if !ok {
 		return nil, core.NewError("LAUNCH_UNSUPPORTED", "Native application launch is not available", "desktop")
@@ -101,11 +106,13 @@ func (s *Service) Launch(ctx context.Context, r LaunchRequest) (core.Result, err
 		return nil, err
 	}
 	defer unlockDesktop()
+	s.control.started(ctx)
 	// 解析本身只读；失败不消耗旧观察，但一经尝试启动就使旧快照失效。
 	target, err := backend.ResolveApplication(ctx, r)
 	if err != nil {
 		return nil, err
 	}
+	s.control.target(ctx, Window{}, r.Mode, Application{Name: target.Name, BundleID: target.BundleID})
 	before, err := s.backend.State(ctx)
 	if err != nil {
 		return nil, err
@@ -148,6 +155,9 @@ func (s *Service) Launch(ctx context.Context, r LaunchRequest) (core.Result, err
 			if w.PID == launched.Application.PID && w.ID > 0 && w.Bounds.Width > 0 && w.Bounds.Height > 0 {
 				windows = append(windows, w)
 			}
+		}
+		if len(windows) > 0 {
+			s.recordTarget(ctx, state, windows[0], r.Mode)
 		}
 		active := state.FrontmostPID == launched.Application.PID
 		result["windows"] = windows

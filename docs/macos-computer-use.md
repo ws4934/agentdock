@@ -4,6 +4,12 @@ AgentDock 内置的 macOS 桌面能力供连接的 AI 客户端使用：**观察
 
 核心实现为 Go；`internal/tool/desktop/native_darwin.m` 作为原生 cgo 桥接。默认以后台窗口为目标，不激活目标应用，不接管全局鼠标。后台指针使用一个可检测的非公开系统接口，边界见下文。运行不需要 Python、AppleScript、第三方桌面 MCP、Skill 或临时脚本。现有 Swift 菜单栏应用只新增配置开关。
 
+## 实时控制小窗
+
+本机菜单栏客户端现已提供自动出现的 Computer Use 控制窗：独立窗口视频预览、目标/模式/动作状态、虚拟指针、暂停、恢复、停止并关闭与收起。**标准关闭按钮会停止控制，收起则保留菜单栏停止入口。** 核心确认清理完成前显示“正在停止”，不会先隐藏后继续输入。
+
+启用桌面功能的正式宿主要求同版本本机控制窗在线；没有监视器时返回 `DESKTOP_MONITOR_UNAVAILABLE`。暂停或停止后，目标截图、启动与输入工具不能重新开启控制，只有本机恢复才允许新的快照。预览不消耗模型的 `snapshot_id`。完整交互、会话/断连规则、开发部署和验收见 [computer-use-monitor.md](computer-use-monitor.md)。
+
 ## 启用
 
 需要 **macOS 14 或更新版本**、已登录且可交互的桌面，以及启用 CGO 的 AgentDock 构建。Linux、Windows、无 CGO 构建保留明确的不支持状态，不模拟成功。AgentDock 本体的 macOS 13 支持不变，但该系统不能使用此桌面功能。
@@ -20,6 +26,8 @@ AgentDock 内置的 macOS 桌面能力供连接的 AI 客户端使用：**观察
 CGO_ENABLED=1 go build -trimpath -o bin/agentdock ./cmd/agentdock
 AGENTDOCK_DESKTOP_ENABLED=true ./bin/agentdock --stdio
 ```
+
+独立 CLI 示例也要求本机监视器：未指定 `AGENTDOCK_RUNTIME_ROOT` 时 socket 位于 `AGENTDOCK_HOME/desktop-runtime`，开发菜单栏进程需用 `AGENTDOCK_MONITOR_RUNTIME_ROOT` 指向同一目录。正式安装路径无需额外设置。不能只更新 Core 而沿用没有控制窗的旧菜单栏应用。
 
 不要直接替换正在为当前会话提供连接的二进制。安装或重启新版本后，客户端可能需要刷新连接或工具列表。
 

@@ -361,3 +361,71 @@
 /* Native Computer Use */
 "Enable native macOS Computer Use" = "Enable native macOS Computer Use";
 "Requires macOS 14+, Accessibility and Screen Recording. Visible screen content is sent to your connected AI client." = "Requires macOS 14+, Accessibility and Screen Recording. Visible screen content is sent to your connected AI client.";
+
+"Computer Use" = "Computer Use";
+
+"Preview needs Screen Recording permission." = "Preview needs Screen Recording permission.";
+
+"Target window is unavailable." = "Target window is unavailable.";
+
+"Waiting for live preview…" = "Waiting for live preview…";
+
+"Live preview is unavailable. Control can still be stopped." = "Live preview is unavailable. Control can still be stopped.";
+
+"Live preview stopped. Control can still be stopped." = "Live preview stopped. Control can still be stopped.";
+
+"Live window preview · local only" = "Live window preview · local only";
+
+"Stop and close" = "Stop and close";
+
+"Collapse" = "Collapse";
+
+"Connection lost. The core pauses when the monitor lease expires." = "Connection lost. The core pauses when the monitor lease expires.";
+
+"Stop not yet confirmed" = "Stop not yet confirmed";
+
+"Waiting for next action" = "Waiting for next action";
+
+"Pausing · releasing input…" = "Pausing · releasing input…";
+
+"Stopping · releasing input…" = "Stopping · releasing input…";
+
+"Paused after monitor disconnected" = "Paused after monitor disconnected";
+
+"Paused" = "Paused";
+
+"Ready for a new task" = "Ready for a new task";
+
+"Foreground control" = "Foreground control";
+
+"Background window" = "Background window";
+
+"Resume with fresh observation" = "Resume with fresh observation";
+
+"Pause" = "Pause";
+
+"Stops desktop control only, not other agent tools." = "Stops desktop control only, not other agent tools.";
+
+"Frame unchanged · window may be static or minimized" = "Frame unchanged · window may be static or minimized";
+
+"Opening application" = "Opening application";
+
+"Observing window" = "Observing window";
+
+"Entering input" = "Entering input";
+
+"Clicking" = "Clicking";
+
+"Dragging" = "Dragging";
+
+"Scrolling" = "Scrolling";
+
+"Operating window" = "Operating window";
+
+"Show Computer Use" = "Show Computer Use";
+
+"Stop desktop control" = "Stop desktop control";
+
+"Resume" = "Resume";
+
+"Waiting for permission" = "Waiting for permission";

@@ -102,7 +102,17 @@ func (s *Service) actBackground(ctx context.Context, obs *observed, r ActionRequ
 			err = core.NewErrorDetails("DESKTOP_ACTION_FAILED", err.Error(), "desktop", map[string]any{"mode": "background", "action": r.Action, "may_have_dispatched": true, "foreground_fallback": false, "retry_instruction": "Observe again; do not automatically replay or activate the target."})
 		}
 	}()
-	dispatch := func(c context.Context, in WindowInput) error { return backend.WindowInput(c, obs.window, in) }
+	dispatch := func(c context.Context, in WindowInput) error {
+		if in.Action == "click" || in.Action == "move" || in.Action == "down" || in.Action == "drag" || in.Action == "scroll" {
+			if in.Element != nil {
+				b := in.Element.Bounds
+				s.control.pointer(ctx, Point{b.X + b.Width/2, b.Y + b.Height/2})
+			} else {
+				s.control.pointer(ctx, in.Point)
+			}
+		}
+		return backend.WindowInput(c, obs.window, in)
+	}
 	switch r.Action {
 	case "type":
 		units := utf16.Encode([]rune(r.Text))

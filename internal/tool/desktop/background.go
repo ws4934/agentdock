@@ -57,6 +57,15 @@ func (s *Service) snapshotBackground(ctx context.Context, r SnapshotRequest) (co
 	if discovery && (r.PID != 0 || r.Accessibility || r.Screenshot != nil && *r.Screenshot) {
 		return nil, invalid("select window_id from a discovery snapshot before requesting an image or AX tree")
 	}
+	if !discovery {
+		var release func()
+		var e error
+		ctx, release, e = s.controlled(ctx, "snapshot")
+		if e != nil {
+			return nil, e
+		}
+		defer release()
+	}
 	screenshot := !discovery && (r.Screenshot == nil || *r.Screenshot)
 	permissions := s.backend.Permissions()
 	if screenshot && !permissions.ScreenRecording {
@@ -69,6 +78,7 @@ func (s *Service) snapshotBackground(ctx context.Context, r SnapshotRequest) (co
 		return nil, err
 	}
 	defer unlockDesktop()
+	s.control.started(ctx)
 	s.invalidate()
 	state, err := s.backend.State(ctx)
 	if err != nil {
@@ -77,7 +87,7 @@ func (s *Service) snapshotBackground(ctx context.Context, r SnapshotRequest) (co
 	if state.FrontmostPID <= 0 {
 		return nil, core.NewError("NO_DESKTOP_SESSION", "An interactive desktop is required", "desktop")
 	}
-	obs := &observed{mode: "background", at: s.now(), state: state, elements: map[string]Element{}}
+	obs := &observed{epoch: s.control.epoch(ctx), mode: "background", at: s.now(), state: state, elements: map[string]Element{}}
 	capture := Capture{}
 	tree := Tree{Elements: []Element{}}
 	if !discovery {
@@ -86,6 +96,7 @@ func (s *Service) snapshotBackground(ctx context.Context, r SnapshotRequest) (co
 			return nil, invalid("window_id/pid does not identify an available window")
 		}
 		obs.window = w
+		s.recordTarget(ctx, state, w, "background")
 		backend, ok := s.backend.(WindowBackend)
 		if !ok {
 			return nil, backgroundUnsupported()

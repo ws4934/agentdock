@@ -5,18 +5,20 @@
 static CFMachPortRef fixtureMouseTap=NULL;
 static long long fixtureOwnedMouseEvents=0,fixtureExternalMoves=0;
 static int fixtureTargetPID=0;
+static BOOL fixtureStrictMouse=NO;
 static const int64_t fixtureBackgroundTag=0x4147444247494E50LL;
 static CGEventRef fixtureObserveMouse(CGEventTapProxy proxy,CGEventType type,CGEventRef event,void *context){
  if(type==kCGEventTapDisabledByTimeout||type==kCGEventTapDisabledByUserInput)return event;
  int pid=(int)CGEventGetIntegerValueField(event,kCGEventSourceUnixProcessID);
  int64_t tag=CGEventGetIntegerValueField(event,kCGEventSourceUserData);
- BOOL owned=pid==getppid()||pid==fixtureTargetPID||tag==fixtureBackgroundTag;
+ BOOL owned=pid==getppid()||pid==fixtureTargetPID||tag==fixtureBackgroundTag||(fixtureStrictMouse&&pid!=0);
  if(owned)fixtureOwnedMouseEvents++;
  else if(type==kCGEventMouseMoved||type==kCGEventLeftMouseDragged||type==kCGEventRightMouseDragged||type==kCGEventOtherMouseDragged)fixtureExternalMoves++;
  return event;
 }
 static void fixtureStartMouseObserver(void){
  if(![NSProcessInfo.processInfo.environment[@"AGENTDOCK_TEST_MONITOR_MOUSE"] isEqual:@"1"])return;
+ fixtureStrictMouse=[NSProcessInfo.processInfo.environment[@"AGENTDOCK_TEST_STRICT_MOUSE"] isEqual:@"1"];
  fixtureTargetPID=[NSProcessInfo.processInfo.environment[@"AGENTDOCK_TEST_TARGET_PID"] intValue];
  CGEventMask mask=CGEventMaskBit(kCGEventMouseMoved)|CGEventMaskBit(kCGEventLeftMouseDragged)|CGEventMaskBit(kCGEventRightMouseDragged)|CGEventMaskBit(kCGEventOtherMouseDragged)|CGEventMaskBit(kCGEventLeftMouseDown)|CGEventMaskBit(kCGEventLeftMouseUp)|CGEventMaskBit(kCGEventRightMouseDown)|CGEventMaskBit(kCGEventRightMouseUp)|CGEventMaskBit(kCGEventOtherMouseDown)|CGEventMaskBit(kCGEventOtherMouseUp)|CGEventMaskBit(kCGEventScrollWheel);
  // Session + listenOnly 不要求 root，不触发系统权限弹窗；不可用时测试必须失败。

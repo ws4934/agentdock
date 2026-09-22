@@ -279,7 +279,11 @@ func TestDragReleaseOnFailureAndCancellation(t *testing.T) {
 				t.Fatal(b.events)
 			}
 			_, e = s.Act(t.Context(), ActionRequest{Action: "key", Key: "a", SnapshotID: id})
-			requireCode(t, e, "STALE_SNAPSHOT")
+			if mode == "cancel" {
+				requireCode(t, e, "DESKTOP_CONTROL_BLOCKED")
+			} else {
+				requireCode(t, e, "STALE_SNAPSHOT")
+			}
 		})
 	}
 }

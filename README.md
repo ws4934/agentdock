@@ -248,3 +248,5 @@ Use `desktop_launch` to open an installed app by exact name, bundle ID, or absol
 The default observation only discovers windows. Select a window for background capture and directed input; foreground takeover requires explicit `mode: foreground` and is never an automatic fallback. Background pointer routing has an optional private macOS coordinate bridge and requires revalidation after system upgrades; this is not a virtual desktop.
 
 See [desktop control, permissions, and verification](docs/macos-computer-use.md).
+
+Computer Use now includes a non-activating live window preview with local pause/resume, stop-on-close, a collapsed menu-bar indicator, and fail-closed monitor leases. The matching menu-bar app must be running; [monitor design and setup](docs/computer-use-monitor.md).

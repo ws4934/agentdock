@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 )
 
@@ -26,6 +27,19 @@ func servePlatform(ctx context.Context, runtimeRoot string, handle func([]byte) 
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSocket == 0 {
 			return fmt.Errorf("desktop control endpoint is not a socket: %s", path)
+		}
+		// 不夺取其他仍运行的 Core 控制端点，否则它的监视/停止通道会被切断。
+		probe, probeErr := net.DialTimeout("unix", path, 200*time.Millisecond)
+		if probeErr == nil {
+			_ = probe.Close()
+			return fmt.Errorf("desktop control endpoint already in use: %s", path)
+		}
+		if !errors.Is(probeErr, syscall.ECONNREFUSED) && !errors.Is(probeErr, os.ErrNotExist) {
+			return fmt.Errorf("cannot verify stale desktop control endpoint: %w", probeErr)
+		}
+		current, statErr := os.Lstat(path)
+		if statErr != nil || !os.SameFile(info, current) {
+			return fmt.Errorf("desktop control endpoint changed during startup: %s", path)
 		}
 		if err := os.Remove(path); err != nil {
 			return fmt.Errorf("remove stale desktop control socket: %w", err)
