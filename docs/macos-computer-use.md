@@ -1,5 +1,7 @@
 # 原生 macOS Computer Use
 
+浮窗现支持紧凑/预览模式、可撤销的“始终允许”，以及按状态变化更新的界面。参见[浮窗与持久授权](computer-use-panel-trust.md)。
+
 单次动作可通过 `observe_after:true` 返回新观察；可预先确定的连续步骤使用 [desktop_sequence](computer-use-sequence.md)，在本机逐步观察和执行，减少模型往返。本机授权、单步、停止和 AX 数据边界保留。
 
 AgentDock 内置的 macOS 桌面能力供连接的 AI 客户端使用：**观察桌面 → 客户端理解和决策 → 执行一个动作 → 再观察验证**。这是独立实现的 Computer Use 工具层，不调用 Codex 插件，也不内置模型或自主规划器。
