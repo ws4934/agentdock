@@ -19,4 +19,6 @@ int ad_capture_window(uint32_t window, int pid, int dimension, int timeout_ms, u
 char *ad_window_tree(const char *window, int nodes, int depth);
 int ad_window_input(const char *request);
 int ad_background_pointer_supported(void);
+char *ad_resolve_application(const char *request);
+char *ad_launch_application(const char *target, int foreground, int timeout_ms);
 #endif

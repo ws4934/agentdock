@@ -300,3 +300,5 @@ int ad_key(int pid,uint16_t key,uint64_t flags) {@autoreleasepool{return ad_keyb
 int ad_text(int pid,const uint16_t *text,size_t length) {@autoreleasepool{return ad_keyboard(pid,0,0,text,length);}}
 
 #include "native_window_impl.h"
+
+#include "native_launch_impl.h"

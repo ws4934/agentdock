@@ -81,9 +81,14 @@
 @end
 int main(int argc,const char **argv){
  @autoreleasepool{
-  if(argc<2||argc>3)return 2;
+  // 原生启动验收由临时 .app 的测试专用 Info.plist 提供状态路径，不向启动工具暴露参数。
+  NSString *bundleState=NSBundle.mainBundle.infoDictionary[@"AgentDockTestStatePath"];
+  if(!bundleState&&(argc<2||argc>3))return 2;
   [NSApplication sharedApplication];[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-  FixtureDelegate *delegate=[[FixtureDelegate alloc]init];delegate.statePath=[NSString stringWithUTF8String:argv[1]];delegate.background=argc==3&&strcmp(argv[2],"--background")==0;NSApp.delegate=delegate;
+  FixtureDelegate *delegate=[[FixtureDelegate alloc]init];
+  delegate.statePath=bundleState?:[NSString stringWithUTF8String:argv[1]];
+  delegate.background=bundleState?[NSBundle.mainBundle.infoDictionary[@"AgentDockTestBackground"] boolValue]:(argc==3&&strcmp(argv[2],"--background")==0);
+  NSApp.delegate=delegate;
   [NSApp run];
  }
  return 0;

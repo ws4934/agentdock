@@ -1,6 +1,48 @@
 # macOS Computer Use 验收记录
 
-## 本轮：后台窗口定向操作（2026-09-21）
+## 最新验收：主动启动应用与完整输入重验（2026-09-21）
+
+基线：`a93aa29`。分支：`feat/native-macos-computer-use`。本轮新增 `desktop_launch`，同时重新执行此前因安全输入/桌面状态而未完成的后台和前台输入验收。**下表中的真实 GUI 测试全部实际执行通过，没有跳过；历史章节中的阻挡记录只描述当时状态，不是当前未完成项。**
+
+仓库目标已通过 GitHub API 核实：`ws4934/agentdock` 是用户自己的 fork，上游为 `uvwt/agentdock`。代码交付目标为该 fork 的现有 PR #1（开发分支 → `ws4934/agentdock:main`），不向上游创建 PR。没有替换或重启当前正在服务连接的宿主。
+
+### 本轮验证结果
+
+环境：macOS 27.0 / Apple Silicon，Go 1.26.5，CLT SDK 26.5。辅助功能、屏幕录制权限已存在，测试期间 Secure Input 为 false；未修改 TCC、quarantine 或其他系统安全设置。日志和独立构建在 `.git/computer-use/launch/`，不提交或公开发布。
+
+| 检查 | 实际结果与证据 |
+| --- | --- |
+| `TestNativeDesktopLaunchMCPFlow -count=2` | **连续两次真实 PASS**，耗时约 5.00 / 5.04 秒。日志 `launch-final.log`、退出码 `launch-final.exit=0`。真正通过 MCP 启动此前未运行的临时 `.app`，取得 PID 和稳定窗口、返回有效 JPEG/AX、赋值中文及 emoji、点击按钮，随后用 Bundle ID 复用同一 PID，并验证显式前台激活。 |
+| `TestNativeBackgroundTwoApplications` | **完整真实 PASS**，约 4.96 秒。日志 `background.log`、退出码 0。覆盖遮挡截图、AX、坐标点击、Unicode、可用快捷键与禁用命令拒绝、移动、滚动、拖拽和释放，以及用户前台应用拒绝后台输入。 |
+| `TestNativeInputIsolatedFixture` | **真实 PASS**，约 3.33 秒。前台显式激活、坐标/AX 点击、Unicode、Command+A、移动/滚动/拖拽/释放均验证。日志 `foreground.log`、退出码 0。 |
+| `TestNativeApplicationResolution` | **只读真实 PASS**。系统 TextEdit 的精确名称、Bundle ID、绝对路径解析一致；非法应用路径/不存在标识和取消均被处理，没有启动 TextEdit。 |
+| 原生只读观察、前台拒绝、MCP 图像 | **全部真实 PASS**。`TestNativeReadOnlyDesktop`、`TestNativeBackgroundForegroundRefusal`、`TestNativeDesktopMCPImage`，证据 `readonly.log`、退出码 0。 |
+| 全仓库 race | `go test -race ./... -count=1 -timeout=3m` 通过，`race.exit=0`。 |
+| 静态检查 | `go vet ./...` 通过，`vet.exit=0`。既有实时 Process Manager 原生边界的 deprecation 告警保持可见。 |
+| 无 CGO 回归 | desktop / app / MCP 全部通过，`nocgo.exit=0`。 |
+| macOS arm64 / amd64 原生构建 | 两个 CGO 构建通过，退出码均 0；只有 arm64 实机运行验证。 |
+| Linux / Windows amd64 | 无 CGO 交叉构建通过，退出码均 0；桌面功能仍明确不支持这些平台。 |
+| 工作区格式检查 | `git diff --check` 通过。全部长测试/构建使用 tmux detached，逐项检查日志和退出码。 |
+
+### 真实启动/操作隔离检查
+
+MCP 验收使用测试临时目录中的 `.app`，经 `NSWorkspace.openApplication` 启动，未给工具添加任意启动参数或环境变量入口。测试专用的状态路径写在临时应用自己的 Info.plist 内，清理只针对本次随机 Bundle ID 的进程。
+
+后台启动和操作完成后，前台哨兵应用的激活状态、key window、first responder、文本、键盘/鼠标输入计数均未改变，自动化未进入全局鼠标事件流。测试最后才单独请求 `mode:foreground` 验证显式切换，同样复用原 PID。后台双应用重验还确认 0 外部鼠标移动时物理指针保持不变。
+
+### 本轮修复与语义
+
+1. 现有 `activate` 只接受运行中 PID，无法启动关闭的应用；新增独立 `desktop_launch`，启动返回不含输入快照，后续必须重新观察窗口。
+2. 新应用可能尚未被 LaunchServices 索引；Bundle ID 查询无结果时，只从实时运行实例取得其真实 Bundle URL，不伪造路径、不写入注册表。
+3. 第一个窗口出现并不代表完成布局；正 `wait_ms` 预算要求连续两次元数据稳定，测试同时给独立应用初次动画留出短暂过渡。即便如此仍不宣称业务控件就绪。
+4. 已运行的相同路径应用不再发送 reopen 事件，避免意外新建文档；多个实例/名称歧义明确拒绝，窗口等待或原生超时不触发自动重启。
+5. 名称搜索采用精确文件名、固定根目录和深度/条目数限制；本地 `.app` 必须有有效 APPL 类型、Bundle ID 和可执行入口。拒绝 shell、文档、URL、任意参数和环境变量字段。
+
+新增启动本身只依赖公开 NSWorkspace API；后台指针仍保留前轮已披露的非公开 `CGEventSetWindowLocation` 兼容风险。应用/Gatekeeper 可能自己显示界面，后台启动请求不等于独立桌面隔离；macOS/Intel/多显示器矩阵和所有第三方应用仍未逐一验收。菜单栏 Swift/DMG/ZIP 打包本轮未重新执行，不借用历史结果宣称新打包已通过。
+
+---
+
+## 历史记录：后台窗口初次交付（2026-09-21）
 
 开发基线：`50b2c8d`。分支：`feat/native-macos-computer-use`。本轮增加默认后台窗口发现/观察、窗口定向输入和显式前台接管边界。代码与独立测试构建已经完成；**没有替换、安装或重启正在服务当前连接的 AgentDock**。
 

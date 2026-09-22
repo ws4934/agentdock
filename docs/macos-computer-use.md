@@ -23,7 +23,7 @@ AGENTDOCK_DESKTOP_ENABLED=true ./bin/agentdock --stdio
 
 不要直接替换正在为当前会话提供连接的二进制。安装或重启新版本后，客户端可能需要刷新连接或工具列表。
 
-默认关闭桌面能力；未启用时，仅 `desktop_status` 可用。其他三个工具不会被公开。开启此能力意味着已认证的 MCP 客户端可以申请观察和控制桌面；请保持原有认证、主机权限和网络访问限制。
+默认关闭桌面能力；未启用时，仅 `desktop_status` 可用。其他四个工具不会被公开。开启此能力意味着已认证的 MCP 客户端可以申请观察和控制桌面；请保持原有认证、主机权限和网络访问限制。
 
 ## 系统权限
 
@@ -39,8 +39,51 @@ AGENTDOCK_DESKTOP_ENABLED=true ./bin/agentdock --stdio
 | --- | --- | --- |
 | `desktop_status` | 查询支持状态、启用开关、屏幕录制/辅助功能/Secure Input 状态 | 否，不触发授权 |
 | `desktop_permissions` | 经用户同意请求指定系统权限 | 可能显示系统弹窗 |
+| `desktop_launch` | 按应用名、Bundle ID 或绝对 .app 路径启动/复用应用，默认后台；有界等待窗口 | 是，应用/系统可能显示界面 |
 | `desktop_snapshot` | 默认只列出窗口；选择窗口后截图和可选 AX 树；显式前台观察 | 否 |
 | `desktop_act` | 对快照绑定目标点击、移动、拖拽、滚动、按键、输入或 AX 全量文本替换；激活仅限显式前台模式 | 是 |
+
+## 主动打开应用再操作
+
+新增 `desktop_launch`，不再要求用户先手动打开应用。它独立于 `desktop_act`，因为尚未启动的应用没有可绑定的窗口；`desktop_act.action:activate` 仍只用于显式切换已经运行的应用。
+
+下面三种选择器**只传一个**，示例应用必须已安装：
+
+```json
+{"app_name":"Safari"}
+{"bundle_id":"com.apple.Safari","mode":"background"}
+{"app_path":"/System/Applications/TextEdit.app","wait_ms":5000}
+```
+
+`app_name` 精确匹配应用包文件名（不含或包含 `.app` 均可，大小写不敏感），仅检查 `/Applications`、`~/Applications`、`/System/Applications`、`/System/Library/CoreServices/Applications` 及其三层以内普通子目录；不进入 `.app` 包内部，不做模糊匹配。找到多个同名应用时返回候选路径，必须明确选择。非标准目录或本地化名称不能解析时，使用准确 `bundle_id` 或 `app_path`。
+
+`bundle_id` 通过系统 LaunchServices 解析；系统尚未索引但已有运行实例时，使用该实例的真实 Bundle URL。`.app` 路径必须是本地绝对路径，原生层检查应用包类型、Bundle ID 和可执行入口。仅打开应用，不接受 shell 命令、任意启动参数、环境变量、文档或 URL，也不会下载应用、移除 quarantine 或绕过 Gatekeeper/TCC。
+
+默认 `mode:background`，向系统请求不激活目标、不隐藏其他应用。应用已经运行时复用完全相同路径的实例，不重新发送 reopen 事件，不无意新建文档。多个同路径实例会报歧义，改用观察工具选定 PID/窗口。只有用户明确同意切换前台时才使用：
+
+```json
+{"app_name":"Safari","mode":"foreground"}
+```
+
+启动返回 `application.pid`、`app_path`、`already_running`、`launch_requested`、`activation_requested`、`activation_observed` 和 `windows`。原生启动调用最多等待 8 秒；`wait_ms` 是启动返回后额外等待窗口的预算，默认 10000、最大 30000 毫秒，0 表示只观察一次。正预算下要求两次窗口元数据稳定；这不保证窗口内部所有控件/动画都已就绪。
+
+`window_ready:false`、`wait_timed_out:true` 可能只是应用没有普通窗口、启动缓慢或窗口尚未稳定，**不是重新启动应用的指令**。窗口等待失败仍保留已取得的 PID；取消、系统弹窗或启动超时后可能有晚到的进程，先观察再决定，不自动重发启动请求。
+
+完整调用顺序：
+
+```text
+desktop_launch(app_name / bundle_id / app_path)
+    → 从返回的 application.pid、windows 选择目标
+    → desktop_snapshot(window_id, pid, accessibility:true)
+    → desktop_act(snapshot_id, ...)
+    → desktop_snapshot(...) 再观察验证
+```
+
+启动结果**没有 `snapshot_id`**，不能直接拿它授权输入；每次启动尝试也会使旧快照失效。多个窗口不能盲选。前台启动后需显式使用前台快照操作，不能借后台路径竞争用户正在使用的应用。
+
+`activates:false` 只限制 AgentDock 向系统发出的启动请求，不能禁止应用自身或 Gatekeeper 显示界面。`background_interference:true` 表示原本不在前台的目标变成了前台；工具会报告而不是抢回焦点或继续隐式输入。应用若没有窗口，工具不会为制造窗口而发送快捷键或打开用户文件。
+
+原生启动使用公开 `NSWorkspace.openApplication` / `OpenConfiguration` API；与后台指针的可选非公开坐标桥无关。参考 Apple 文档：[NSWorkspace](https://developer.apple.com/documentation/appkit/nsworkspace)、[OpenConfiguration](https://developer.apple.com/documentation/appkit/nsworkspace/openconfiguration)。
 
 ## 后台窗口优先的工作流
 
@@ -199,3 +242,12 @@ AGENTDOCK_DESKTOP_INPUT_TEST=1 go test -tags desktop_integration \
 该测试创建后台目标和覆盖它的前台哨兵，核查真实目标状态、窗口截图、前台窗口、first responder 及键盘/鼠标泄漏。只读鼠标事件观察器不监听键盘、不修改或拦截事件；外部鼠标移动单独计数，自动化进入全局鼠标流或无外部事件的光标变化会失败。只有显式测试环境变量指定路径时才保存测试图像/日志；正常工具不保存截图。
 
 当前范围不包含后台虚拟桌面、锁屏绕过、OCR、自带模型、无人值守权限提升或所有第三方应用的业务级适配。多显示器的坐标换算有单测，实际多显示器硬件仍需单独验收。
+
+真实应用启动和 MCP 操作验收（只创建并操作临时测试 .app；与其他 GUI 输入测试串行执行）：
+
+```sh
+AGENTDOCK_DESKTOP_INPUT_TEST=1 go test -tags desktop_integration \
+  ./internal/mcp -run TestNativeDesktopLaunchMCPFlow -v -count=1
+```
+
+该测试通过真正的 MCP `desktop_launch` 启动未运行 `.app`，检查窗口 JPEG/AX、文本填写和按钮点击，再验证相同 PID 复用与显式前台激活；不会启动 Safari/TextEdit 或打开真实用户文档。`TestNativeApplicationResolution` 只解析系统 TextEdit 的名称/Bundle ID/路径，不启动它。

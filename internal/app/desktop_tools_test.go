@@ -68,7 +68,7 @@ func TestDesktopRuntimeContracts(t *testing.T) {
 		}
 		assertToolResultMatchestestOutputSchema(t, desktop.ToolAct, result)
 	}
-	for name, request := range map[string]any{desktop.ToolPermissions: desktop.PermissionRequest{}, desktop.ToolSnapshot: desktop.SnapshotRequest{}, desktop.ToolAct: desktop.ActionRequest{}} {
+	for name, request := range map[string]any{desktop.ToolLaunch: desktop.LaunchRequest{}, desktop.ToolPermissions: desktop.PermissionRequest{}, desktop.ToolSnapshot: desktop.SnapshotRequest{}, desktop.ToolAct: desktop.ActionRequest{}} {
 		definition, _ := r.ToolDefinition(name)
 		assertSchemaMatchesRequestType(t, name, definition.InputSchema, reflect.TypeOf(request), true, nil)
 	}
@@ -78,7 +78,7 @@ func TestDesktopDisabledAndStrictSchemas(t *testing.T) {
 	if _, ok := r.ToolDefinition(desktop.ToolStatus); !ok {
 		t.Fatal("status must be available when desktop is disabled")
 	}
-	for _, name := range []string{desktop.ToolPermissions, desktop.ToolSnapshot, desktop.ToolAct} {
+	for _, name := range []string{desktop.ToolLaunch, desktop.ToolPermissions, desktop.ToolSnapshot, desktop.ToolAct} {
 		if _, ok := r.ToolDefinition(name); ok {
 			t.Fatalf("%s exposed while disabled", name)
 		}

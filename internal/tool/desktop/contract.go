@@ -4,6 +4,7 @@ import "github.com/uvwt/agentdock/internal/tool/contract"
 
 const (
 	ToolStatus      = "desktop_status"
+	ToolLaunch      = "desktop_launch"
 	ToolPermissions = "desktop_permissions"
 	ToolSnapshot    = "desktop_snapshot"
 	ToolAct         = "desktop_act"
@@ -14,6 +15,15 @@ func InputSchema(name string) (map[string]any, bool) {
 	switch name {
 	case ToolStatus:
 		return contract.InputObject(props), true
+	case ToolLaunch:
+		props["bundle_id"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 255, "description": "Exact bundle identifier of an installed application. Use exactly one selector."}
+		props["app_path"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 4096, "description": "Absolute local .app bundle path; not a document, URL or executable. Use exactly one selector."}
+		props["app_name"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 255, "description": "Exact .app filename in standard application folders, e.g. Safari. Ambiguous names are refused; prefer bundle_id or app_path."}
+		props["mode"] = enum("Default background: do not request activation. Explicit foreground may bring the app forward. Apps or Gatekeeper may still show UI; never fall back automatically.", "background", "foreground")
+		props["wait_ms"] = contract.BoundedInteger("Wait for an app window after launch, default 10000 ms. Zero observes once. Does not retry launch or create windows; native launch itself has a separate 8-second bound.", 0, 30000)
+		schema := contract.InputObject(props)
+		schema["oneOf"] = []map[string]any{{"required": []string{"bundle_id"}}, {"required": []string{"app_path"}}, {"required": []string{"app_name"}}}
+		return schema, true
 	case ToolPermissions:
 		props["permission"] = enum("macOS permission to request. This may display a system prompt; only call with user authorization.", "accessibility", "screen_recording")
 		return contract.InputObject(props, "permission"), true
@@ -87,6 +97,14 @@ func OutputSchema(name string) (map[string]any, bool) {
 			"coordinate_system": contract.String("Coordinate convention."), "state": contract.OpenObject("Foreground PID, applications, displays with logical bounds, and onscreen windows."),
 			"elements": contract.ObjectArray("AX element IDs, labels, roles, logical bounds, enabled/pressable state; no raw AX addresses or values."), "tree_truncated": contract.Boolean("AX traversal reached a node, depth, or time bound."), "image": contract.OpenObject("Image size, display ID, screen bounds and exact pixel-to-point scale."), "content_trust": contract.String("Screen-content trust boundary."),
 		}, "snapshot_id", "captured_at", "expires_in_ms", "coordinate_system", "state", "elements", "tree_truncated"), true
+	case ToolLaunch:
+		return contract.OutputObject(map[string]any{
+			"application": contract.OutputObject(map[string]any{"pid": contract.Integer("Running process identifier."), "bundle_id": contract.String("Verified application identifier."), "name": contract.String("Application name.")}, "pid", "bundle_id", "name"),
+			"app_path":    contract.String("Resolved local app bundle."), "mode": contract.String("background or foreground."),
+			"already_running": contract.Boolean("An existing exact-path instance was reused without reopening it."), "launch_requested": contract.Boolean("LaunchServices was asked to open the application."), "activation_requested": contract.Boolean("Foreground activation was explicitly requested."), "activation_observed": contract.Boolean("App was foreground at last observation."),
+			"windows": contract.ObjectArray("Observed windows owned by the returned PID; choose one and take a fresh snapshot."), "window_ready": contract.Boolean("At least one onscreen window was observed; not business readiness."), "wait_timed_out": contract.Boolean("Positive window wait expired before readiness."), "observation_complete": contract.Boolean("Post-launch desktop metadata could be read."), "observation_error": contract.String("Observation limitation; do not relaunch automatically."),
+			"foreground_changed": contract.Boolean("Foreground PID changed during this call; may also reflect user activity."), "background_interference": contract.Boolean("App became foreground despite a background request."), "background_input_allowed": contract.Boolean("App is not currently foreground; revalidation before each action still applies."), "foreground_fallback": contract.Boolean("Always false."), "application_verified": contract.Boolean("Always false: running process/window is not task success."), "next_required_action": contract.String("desktop_snapshot, never use launch response as an input token."),
+		}, "application", "app_path", "mode", "already_running", "launch_requested", "activation_requested", "windows", "window_ready", "wait_timed_out", "observation_complete", "application_verified", "next_required_action", "foreground_fallback"), true
 	case ToolAct:
 		return contract.OutputObject(map[string]any{
 			"mode": contract.String("Dispatch mode."), "target_window": contract.OpenObject("Bound background target."), "foreground_fallback": contract.Boolean("Always false for background operations."),
