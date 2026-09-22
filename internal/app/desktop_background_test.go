@@ -55,6 +55,7 @@ func TestDesktopBackgroundRuntimeContracts(t *testing.T) {
 	for _, action := range []map[string]any{
 		{"action": "click", "point": map[string]any{"x": 120, "y": 80}},
 		{"action": "click", "element_id": "e1"},
+		{"action": "click", "element_id": "e1", "observe_after": true},
 		{"action": "move", "point": map[string]any{"x": 120, "y": 80}},
 		{"action": "drag", "path": []map[string]any{{"x": 120, "y": 80}, {"x": 150, "y": 90}}, "duration_ms": 16},
 		{"action": "scroll", "point": map[string]any{"x": 120, "y": 80}, "delta_y": -100},
@@ -73,6 +74,16 @@ func TestDesktopBackgroundRuntimeContracts(t *testing.T) {
 			t.Fatalf("%s: %v", action["action"], err)
 		}
 		assertToolResultMatchestestOutputSchema(t, desktop.ToolAct, result)
+		if action["observe_after"] == true {
+			if result["observation_status"] != "captured" || result["_mcp_image_base64"] == nil {
+				t.Fatal("post-action observation was not transported", result)
+			}
+			observation, ok := result["observation"].(Result)
+			if !ok || observation["snapshot_id"] == snapshot["snapshot_id"] || observation["_mcp_image_base64"] != nil {
+				t.Fatal("missing fresh observation or nested internal image", result)
+			}
+			assertToolResultMatchestestOutputSchema(t, desktop.ToolSnapshot, observation)
+		}
 		if result["mode"] != "background" || result["foreground_fallback"] != false || result["application_verified"] != false {
 			t.Fatal(result)
 		}
@@ -84,5 +95,10 @@ func TestDesktopBackgroundRuntimeContracts(t *testing.T) {
 	}
 	if len(b.inputs) < 8 {
 		t.Fatal("missing background dispatch coverage")
+	}
+	for _, value := range []any{"true", 1, []any{true}} {
+		if _, err := r.Call(t.Context(), desktop.ToolAct, map[string]any{"action": "click", "element_id": "e1", "snapshot_id": "00000000000000000000000000000000", "observe_after": value}); err == nil {
+			t.Fatalf("accepted invalid observe_after: %#v", value)
+		}
 	}
 }

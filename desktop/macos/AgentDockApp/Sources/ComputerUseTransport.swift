@@ -30,6 +30,8 @@ struct ComputerUseState: Decodable {
     let task_reference: String?
     let pending_application: ComputerUseApproval?
     let step_mode: Bool?
+    let sequence_step: Int?
+    let sequence_total: Int?
 
     var isLive: Bool { ["running", "pausing", "stopping", "paused", "cleanup_failed"].contains(phase) }
     var isDraining: Bool { phase == "pausing" || phase == "stopping" }

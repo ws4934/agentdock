@@ -15,6 +15,8 @@ const monitorLease = 3 * time.Second
 const monitorIdle = 60 * time.Second
 
 type ControlState struct {
+	SequenceStep       int                  `json:"sequence_step,omitempty"`
+	SequenceTotal      int                  `json:"sequence_total,omitempty"`
 	Events             []ControlEvent       `json:"recent_operations,omitempty"`
 	TaskRequired       bool                 `json:"task_required"`
 	TaskLabel          string               `json:"task_label"`
@@ -237,6 +239,7 @@ func (m *controlSession) acquire(ctx context.Context, activity string) (context.
 			}
 			if m.view.Active == 0 {
 				m.view.Activity = "waiting"
+				m.view.SequenceStep, m.view.SequenceTotal = 0, 0
 			}
 		})
 	}

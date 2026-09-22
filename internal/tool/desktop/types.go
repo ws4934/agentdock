@@ -102,20 +102,21 @@ type PermissionRequest struct {
 	Permission string `json:"permission"`
 }
 type ActionRequest struct {
-	TaskID     string   `json:"task_id,omitempty"`
-	Action     string   `json:"action"`
-	SnapshotID string   `json:"snapshot_id"`
-	PID        int      `json:"pid,omitempty"`
-	Point      *Point   `json:"point,omitempty"`
-	Space      string   `json:"space,omitempty"`
-	ElementID  string   `json:"element_id,omitempty"`
-	Button     string   `json:"button,omitempty"`
-	ClickCount int      `json:"click_count,omitempty"`
-	Path       []Point  `json:"path,omitempty"`
-	DurationMS int      `json:"duration_ms,omitempty"`
-	DeltaX     int      `json:"delta_x,omitempty"`
-	DeltaY     int      `json:"delta_y,omitempty"`
-	Key        string   `json:"key,omitempty"`
-	Modifiers  []string `json:"modifiers,omitempty"`
-	Text       string   `json:"text,omitempty"`
+	ObserveAfter bool     `json:"observe_after,omitempty"`
+	TaskID       string   `json:"task_id,omitempty"`
+	Action       string   `json:"action"`
+	SnapshotID   string   `json:"snapshot_id"`
+	PID          int      `json:"pid,omitempty"`
+	Point        *Point   `json:"point,omitempty"`
+	Space        string   `json:"space,omitempty"`
+	ElementID    string   `json:"element_id,omitempty"`
+	Button       string   `json:"button,omitempty"`
+	ClickCount   int      `json:"click_count,omitempty"`
+	Path         []Point  `json:"path,omitempty"`
+	DurationMS   int      `json:"duration_ms,omitempty"`
+	DeltaX       int      `json:"delta_x,omitempty"`
+	DeltaY       int      `json:"delta_y,omitempty"`
+	Key          string   `json:"key,omitempty"`
+	Modifiers    []string `json:"modifiers,omitempty"`
+	Text         string   `json:"text,omitempty"`
 }

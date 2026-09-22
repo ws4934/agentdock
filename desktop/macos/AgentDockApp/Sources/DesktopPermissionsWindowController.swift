@@ -25,7 +25,7 @@ final class DesktopPermissionsWindowController: NSWindowController, NSWindowDele
         self.snapshotProvider = snapshotProvider
         self.coreCheck = coreCheck
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 840, height: 750),
+            contentRect: NSRect(x: 0, y: 0, width: 840, height: 590),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -70,15 +70,11 @@ final class DesktopPermissionsWindowController: NSWindowController, NSWindowDele
 
         let title = NSTextField(labelWithString: L10n.text("System permissions"))
         title.font = .systemFont(ofSize: 22, weight: .semibold)
-        let intro = PermissionUI.detailLabel(
-            L10n.text("This page reports access for the menu app and running Core separately, not the switches in System Settings. It refreshes while open and when you return from Settings. Grant only the permissions you need.")
-        )
-        intro.widthAnchor.constraint(equalToConstant: 750).isActive = true
         contentStack.addArrangedSubview(title)
-        contentStack.addArrangedSubview(intro)
         contentStack.addArrangedSubview(PermissionUI.separator())
 
-        let appIdentity = PermissionUI.detailLabel(L10n.text("Menu app · current process") + " · PID " + String(identity.processID) + "\n" + identity.appPath)
+        let appIdentity = PermissionUI.detailLabel(L10n.text("Menu app · current process") + " · PID " + String(identity.processID))
+        appIdentity.toolTip = identity.appPath
         appIdentity.widthAnchor.constraint(equalToConstant: 750).isActive = true
         contentStack.addArrangedSubview(appIdentity)
         recoveryLabel.widthAnchor.constraint(equalToConstant: 750).isActive = true
@@ -111,21 +107,13 @@ final class DesktopPermissionsWindowController: NSWindowController, NSWindowDele
 
         let appManagementTitle = NSTextField(labelWithString: L10n.text("App Management"))
         appManagementTitle.font = .systemFont(ofSize: 13, weight: .medium)
-        let appManagementDetail = PermissionUI.detailLabel(
-            L10n.text("Used to update AgentDock or manage other applications.")
-        )
-        appManagementDetail.widthAnchor.constraint(equalToConstant: 380).isActive = true
-        let appManagementText = NSStackView(views: [appManagementTitle, appManagementDetail])
-        appManagementText.orientation = .vertical
-        appManagementText.alignment = .leading
-        appManagementText.spacing = 3
         let appManagementButton = NSButton(
             title: L10n.text("Open App Management settings"),
             target: self,
             action: #selector(openAppManagementSettings)
         )
         appManagementButton.bezelStyle = .rounded
-        let appManagementRow = NSStackView(views: [appManagementText, NSView(), appManagementButton])
+        let appManagementRow = NSStackView(views: [appManagementTitle, NSView(), appManagementButton])
         appManagementRow.orientation = .horizontal
         appManagementRow.alignment = .centerY
         appManagementRow.spacing = 8
@@ -135,10 +123,6 @@ final class DesktopPermissionsWindowController: NSWindowController, NSWindowDele
 
         let filesTitle = NSTextField(labelWithString: L10n.text("Files and Folders"))
         filesTitle.font = .systemFont(ofSize: 15, weight: .semibold)
-        let filesDetail = PermissionUI.detailLabel(
-            L10n.text("Check whether AgentDock can access Desktop, Documents, Downloads, and other folders you select.")
-        )
-        filesDetail.widthAnchor.constraint(equalToConstant: 750).isActive = true
         let filesButton = NSButton(title: L10n.text("Check file access…"), target: self, action: #selector(openFileAccess))
         filesButton.bezelStyle = .rounded
         let filesRow = NSStackView(views: [filesTitle, NSView(), filesButton])
@@ -146,7 +130,6 @@ final class DesktopPermissionsWindowController: NSWindowController, NSWindowDele
         filesRow.alignment = .centerY
         filesRow.widthAnchor.constraint(equalToConstant: 750).isActive = true
         contentStack.addArrangedSubview(filesRow)
-        contentStack.addArrangedSubview(filesDetail)
 
         let refreshButton = NSButton(title: L10n.text("Refresh"), target: self, action: #selector(refreshPressed))
         refreshButton.bezelStyle = .rounded
@@ -170,12 +153,7 @@ final class DesktopPermissionsWindowController: NSWindowController, NSWindowDele
     private func makePermissionRow(_ kind: DesktopPermissionKind) -> NSView {
         let title = NSTextField(labelWithString: kind.title)
         title.font = .systemFont(ofSize: 13, weight: .medium)
-        let detail = PermissionUI.detailLabel(kind.detail)
-        detail.widthAnchor.constraint(equalToConstant: 390).isActive = true
-        let text = NSStackView(views: [title, detail])
-        text.orientation = .vertical
-        text.alignment = .leading
-        text.spacing = 3
+        title.toolTip = kind.detail
 
         let status = PermissionUI.statusLabel()
         status.widthAnchor.constraint(equalToConstant: 100).isActive = true
@@ -188,7 +166,7 @@ final class DesktopPermissionsWindowController: NSWindowController, NSWindowDele
         settings.bezelStyle = .rounded
         settings.tag = kind.rawValue
 
-        let row = NSStackView(views: [text, NSView(), status, request, settings])
+        let row = NSStackView(views: [title, NSView(), status, request, settings])
         row.orientation = .horizontal
         row.alignment = .centerY
         row.spacing = 8
@@ -258,12 +236,13 @@ final class DesktopPermissionsWindowController: NSWindowController, NSWindowDele
             switch result {
             case .success(let report):
                 self.coreReport = report
-                self.coreIdentityLabel.toolTip = report.checked_at
-                self.coreIdentityLabel.stringValue = "PID \(report.process_id) · \(report.build.commit)\n\(report.executable_path)"
+                self.coreIdentityLabel.toolTip = report.executable_path + "\n" + report.checked_at
+                self.coreIdentityLabel.stringValue = "PID \(report.process_id) · \(report.build.commit)"
             case .failure:
                 // 新旧版本混用、socket断开等都表示未知，不能显示未授权或沿用旧的绿色结果。
                 self.coreReport = nil
-                self.coreIdentityLabel.stringValue = L10n.text("Core status is unavailable. Start the matching Core version; menu app access is not proof of Core access.")
+                self.coreIdentityLabel.stringValue = L10n.text("Core unavailable")
+                self.coreIdentityLabel.toolTip = L10n.text("Core status is unavailable. Start the matching Core version; menu app access is not proof of Core access.")
             }
             self.locateCoreButton.isEnabled = self.coreReport?.executable_path.isEmpty == false
             for kind in [DesktopPermissionKind.accessibility, .screenRecording] {
@@ -278,7 +257,8 @@ final class DesktopPermissionsWindowController: NSWindowController, NSWindowDele
 
     private func renderRecovery() {
         recoveryLabel.isHidden = !DesktopPermissionPresentation.needsRecovery(latestSnapshot, core: coreReport)
-        recoveryLabel.stringValue = DesktopPermissionPresentation.recovery(adHoc: identity.adHoc)
+        recoveryLabel.stringValue = L10n.text("Permission not active · see recovery")
+        recoveryLabel.toolTip = DesktopPermissionPresentation.recovery(adHoc: identity.adHoc)
     }
 
     @objc private func locateCore() {

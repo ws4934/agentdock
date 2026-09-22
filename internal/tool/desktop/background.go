@@ -66,6 +66,20 @@ func (s *Service) snapshotBackground(ctx context.Context, r SnapshotRequest) (co
 		}
 		defer release()
 	}
+	if err := lockDesktop(ctx); err != nil {
+		return nil, err
+	}
+	defer unlockDesktop()
+	s.control.started(ctx)
+	return s.snapshotBackgroundLocked(ctx, r)
+}
+
+// 调用方持有 desktopGate 和同一控制代次；动作后观察不再次获取输入许可。
+func (s *Service) snapshotBackgroundLocked(ctx context.Context, r SnapshotRequest) (core.Result, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	discovery := r.WindowID == 0
 	screenshot := !discovery && (r.Screenshot == nil || *r.Screenshot)
 	permissions := s.backend.Permissions()
 	if screenshot && !permissions.ScreenRecording {
@@ -74,11 +88,6 @@ func (s *Service) snapshotBackground(ctx context.Context, r SnapshotRequest) (co
 	if r.Accessibility && !permissions.Accessibility {
 		return nil, permissionError("accessibility")
 	}
-	if err := lockDesktop(ctx); err != nil {
-		return nil, err
-	}
-	defer unlockDesktop()
-	s.control.started(ctx)
 	if !discovery {
 		s.invalidate()
 	}
@@ -89,7 +98,12 @@ func (s *Service) snapshotBackground(ctx context.Context, r SnapshotRequest) (co
 	if state.FrontmostPID <= 0 {
 		return nil, core.NewError("NO_DESKTOP_SESSION", "An interactive desktop is required", "desktop")
 	}
-	obs := &observed{epoch: s.control.epoch(ctx), mode: "background", at: s.now(), state: state, elements: map[string]Element{}}
+	r.TaskID = "" // 不把任务令牌保存在观察选项中。
+	if r.Screenshot != nil {
+		screenshotOption := *r.Screenshot
+		r.Screenshot = &screenshotOption
+	}
+	obs := &observed{options: r, epoch: s.control.epoch(ctx), mode: "background", at: s.now(), state: state, elements: map[string]Element{}}
 	capture := Capture{}
 	tree := Tree{Elements: []Element{}}
 	if !discovery {
