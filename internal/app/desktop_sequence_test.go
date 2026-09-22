@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -60,15 +61,34 @@ func TestDesktopSequenceRuntimeContract(t *testing.T) {
 		t.Fatal("missing final image transport")
 	}
 	for _, bad := range []map[string]any{
-		{"action": "click", "element": map[string]any{"role": "AXButton"}},
+		{"action": "click"},
+		{"action": "click", "element": map[string]any{}},
+		{"action": "click", "point": map[string]any{"x": 120, "y": 80}, "element": map[string]any{"title": "Next"}},
 		{"action": "click", "element": map[string]any{"role": "AXButton", "title": "Next"}, "text": ""},
+		{"action": "move"},
+		{"action": "drag"},
+		{"action": "scroll", "delta_y": -100},
+		{"action": "scroll", "point": map[string]any{"x": 120, "y": 80}},
+		{"action": "type"},
+		{"action": "type", "text": ""},
+		{"action": "set_value", "element": map[string]any{"title": "Field"}},
 		{"action": "set_value", "element": map[string]any{"role": "AXTextField", "title": "Field"}, "text": nil},
-		{"action": "key", "key": "enter"},
+		{"action": "key"},
+		{"action": "key", "key": "not-a-key"},
+		{"action": "wait", "text": "not-input"},
 		{"action": "click", "point": map[string]any{"x": 1, "y": 1}},
 		{"action": "click", "element": map[string]any{"role": "AXButton", "title": "Next"}, "script": "arbitrary"},
 	} {
-		if _, err := r.Call(t.Context(), desktop.ToolSequence, map[string]any{"snapshot_id": before["snapshot_id"], "steps": []map[string]any{bad}}); err == nil {
-			t.Fatal("accepted invalid sequence", bad)
+		// 每份计划使用未消耗的观察，且把坏参数放在有效首步之后；旧测试复用已消耗
+		// 快照会因 STALE_SNAPSHOT 假通过，无法证明整段参数在首个输入前被拒绝。
+		fresh := getSnapshot()
+		_, err := r.Call(t.Context(), desktop.ToolSequence, map[string]any{"snapshot_id": fresh["snapshot_id"], "steps": []map[string]any{steps[0], bad}})
+		var validation *ToolError
+		if !errors.As(err, &validation) || validation.Code != "INVALID_ARGUMENT" {
+			t.Fatalf("invalid tail did not fail validation: %v, %#v", err, bad)
+		}
+		if len(b.inputs) != 2 {
+			t.Fatal("invalid tail allowed an earlier input", bad)
 		}
 	}
 	if len(b.inputs) != 2 {

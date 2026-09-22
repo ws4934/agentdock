@@ -154,6 +154,9 @@ func (s *Server) callTool(ctx context.Context, name string, request *mcpsdk.Call
 	slog.Info("tool started", "tool", name)
 	result, err := s.runtime.Call(ctx, name, arguments)
 	finishedAttrs := []any{"tool", name, "duration_ms", time.Since(started).Milliseconds(), "ok", err == nil}
+	if name == "desktop_sequence" {
+		finishedAttrs = appendSequenceLogFields(finishedAttrs, result)
+	}
 	if err != nil {
 		finishedAttrs = append(finishedAttrs, "error", err)
 	}
@@ -173,6 +176,22 @@ func (s *Server) callTool(ctx context.Context, name string, request *mcpsdk.Call
 		}
 	}
 	return &response, nil
+}
+
+// 批量部分失败会以正常工具响应返回进度；仅 err==nil 不等于动作已完成。
+// 只记录阶段与计数，不记录步骤内容、任务令牌、快照ID或AX标签。
+func appendSequenceLogFields(attrs []any, result app.Result) []any {
+	for _, key := range []string{"outcome", "total_steps", "completed_steps", "dispatched_steps", "failed_step", "failure_stage"} {
+		if value, ok := result[key]; ok {
+			attrs = append(attrs, key, value)
+		}
+	}
+	if failure, ok := result["error"].(map[string]any); ok {
+		if code, ok := failure["code"].(string); ok {
+			attrs = append(attrs, "code", code)
+		}
+	}
+	return attrs
 }
 
 func toolMetadata(def ToolDefinition, mcpAppsEnabled bool) map[string]any {

@@ -1,5 +1,7 @@
 # Computer Use：连续动作流
 
+首次输入可以直接提交完整批次，不需要先单击。客户端拦截与 Core 错误的定位说明见[首次连续调用](computer-use-first-sequence.md)。
+
 `desktop_sequence` 在一次调用中连续执行一组动作，最后返回窗口画面。普通操作不需要在每一步等待模型，也不强制为每一步填写控件名或后置条件。
 
 支持 `click`（含双击和鼠标按钮）、`move`、`drag`、`scroll`、`key`、`type`、`set_value` 和显式 `wait`。除 `wait` 外，参数、文本校验、坐标换算和实际输入复用 `desktop_act` 的实现。

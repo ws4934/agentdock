@@ -27,8 +27,10 @@ func sequenceInputSchema(props map[string]any) map[string]any {
 	for _, key := range []string{"task_id", "snapshot_id", "observe_after", "pid", "element_id"} {
 		delete(stepProps, key)
 	}
-	stepProps["action"] = enum("Action to execute in order.", "click", "move", "drag", "scroll", "key", "type", "set_value", "wait")
+	stepProps["action"] = enum("Ordered action. click: exactly one of point or element; move/scroll: point; drag: path; key: key; type: nonempty text; set_value: element and text; wait: optional duration_ms. The entire batch is validated before any input.", "click", "move", "drag", "scroll", "key", "type", "set_value", "wait")
+	stepProps["point"] = pointSchema("Position for click, move or scroll. For click use exactly one of point or element; background scroll requires point.")
 	stepProps["element"] = sequenceSelectorSchema()
+	stepProps["element"].(map[string]any)["description"] = "Exact AX selector for click or set_value; matched uniquely against a fresh tree. Do not use snapshot-local element_id in a batch."
 	stepProps["duration_ms"] = contract.BoundedInteger("Drag duration (up to 2000 ms), or explicit wait (up to 30000 ms; default 200). No automatic delay between actions.", 1, 30000)
 	stepProps["after"] = contract.InputObject(map[string]any{
 		"condition":  enum("Optional read-only condition after this action.", "element_exists", "element_absent", "element_enabled", "element_disabled"),
@@ -36,15 +38,9 @@ func sequenceInputSchema(props map[string]any) map[string]any {
 		"timeout_ms": contract.BoundedInteger("Condition wait, default 2000 ms; zero checks once. Input is never retried.", 0, 30000),
 	}, "condition", "element")
 	step := contract.InputObject(stepProps, "action")
-	step["allOf"] = []map[string]any{
-		when("click", map[string]any{"oneOf": []map[string]any{{"required": []string{"point"}}, {"required": []string{"element"}}}}),
-		when("move", map[string]any{"required": []string{"point"}}),
-		when("drag", map[string]any{"required": []string{"path"}}),
-		when("scroll", map[string]any{"required": []string{"point"}}),
-		when("key", map[string]any{"required": []string{"key"}}),
-		when("type", map[string]any{"required": []string{"text"}, "properties": map[string]any{"text": map[string]any{"minLength": 1}}}),
-		when("set_value", map[string]any{"required": []string{"text", "element"}}),
-	}
+	// 向客户端公布明确的字段对象，避免嵌套 allOf/if/then 被适配成多个空 object。
+	// 类型、边界与未知字段仍由 schema 校验；动作间字段约束统一由 normalizeSequence
+	// 在任何输入、授权等待或快照消耗前执行，不能用契约简化放松实际输入校验。
 	props["steps"] = map[string]any{"type": "array", "minItems": 1, "maxItems": maxSequenceSteps, "items": step, "description": "Ordered actions using point coordinates or optional AX selectors. Normal steps run without extra model calls; final observation is returned. Stop and review on input errors or local pause/stop."}
 	return contract.InputObject(props, "snapshot_id", "steps")
 }
