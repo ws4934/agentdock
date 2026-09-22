@@ -501,3 +501,5 @@
 "Locate Core" = "定位 Core";
 
 "Checking…" = "正在检查…";
+"Core unavailable" = "Core 不可用";
+"Permission not active · see recovery" = "权限未生效 · 查看权限恢复";

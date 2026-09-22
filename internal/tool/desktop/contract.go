@@ -48,6 +48,7 @@ func InputSchema(name string) (map[string]any, bool) {
 		props["max_depth"] = contract.BoundedInteger("Maximum AX depth. Default 8.", 1, 16)
 		return contract.InputObject(props), true
 	case ToolAct:
+		props["observe_after"] = contract.Boolean("After one successful background action, return a fresh observation of the same window using the original snapshot settings. Default false. No action batching or retries. Review observation before the next action; local single-step still pauses.")
 		props["action"] = enum("One desktop action. Always observe again afterward; event dispatch is not proof that the application completed the task.", "activate", "click", "move", "drag", "scroll", "key", "type", "set_value")
 		props["snapshot_id"] = map[string]any{"type": "string", "pattern": "^[0-9a-f]{32}$", "description": "Fresh desktop_snapshot ID, expires after 30 seconds and is consumed by one attempted action."}
 		props["pid"] = contract.BoundedInteger("Running application PID for activate, obtained from snapshot state.applications.", 1, 2147483647)
@@ -120,7 +121,10 @@ func OutputSchema(name string) (map[string]any, bool) {
 		}, "application", "app_path", "mode", "already_running", "launch_requested", "activation_requested", "windows", "window_ready", "wait_timed_out", "observation_complete", "application_verified", "next_required_action", "foreground_fallback"), true
 	case ToolAct:
 		return contract.OutputObject(map[string]any{
-			"mode": contract.String("Dispatch mode."), "target_window": contract.OpenObject("Bound background target."), "foreground_fallback": contract.Boolean("Always false for background operations."),
+			"observation":        contract.OpenObject("Post-action background snapshot when observe_after was requested. Review before using its one-use snapshot_id. Single-step returns observation_only with an empty ID."),
+			"observation_status": enum("Post-action observation result; not application success.", "captured", "unavailable"),
+			"observation_error":  contract.OpenObject("Input already dispatched but observation unavailable. Never replay input; respect local pause/stop."),
+			"mode":               contract.String("Dispatch mode."), "target_window": contract.OpenObject("Bound background target."), "foreground_fallback": contract.Boolean("Always false for background operations."),
 			"action": contract.String("Dispatched action."), "event_dispatched": contract.Boolean("System accepted the event for dispatch, not application-level confirmation."),
 			"application_verified": contract.Boolean("False; another observation is required."), "next_required_action": contract.String("Observe again."), "snapshot_consumed": contract.Boolean("Snapshot cannot be reused."),
 		}, "action", "event_dispatched", "application_verified", "next_required_action", "snapshot_consumed"), true

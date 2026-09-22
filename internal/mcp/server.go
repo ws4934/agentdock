@@ -274,12 +274,12 @@ func toolEnvelope(name string, structured any, err error) map[string]any {
 		}
 		return map[string]any{"isError": true, "structuredContent": payload, "content": []map[string]any{{"type": "text", "text": pretty(payload)}}}
 	}
-	if name == "view_image" || name == "desktop_snapshot" {
+	if name == "view_image" || name == "desktop_snapshot" || name == "desktop_act" {
 		payload := asMap(structured)
 		if data, _ := payload["_mcp_image_base64"].(string); data != "" {
 			mimeType, _ := payload["_mcp_image_mime_type"].(string)
 			clean := cloneWithoutInternalImage(payload)
-			if name == "desktop_snapshot" {
+			if name == "desktop_snapshot" || name == "desktop_act" {
 				return map[string]any{"isError": false, "structuredContent": clean, "content": []map[string]any{{"type": "text", "text": pretty(clean)}, {"type": "image", "data": data, "mimeType": mimeType}}}
 			}
 			return map[string]any{"isError": false, "structuredContent": clean, "content": []map[string]any{{"type": "image", "data": data, "mimeType": mimeType}}}

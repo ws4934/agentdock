@@ -1,5 +1,7 @@
 # 原生 macOS Computer Use
 
+单次动作可通过 `observe_after:true` 同时返回后台窗口的新观察，详见[动作后观察与精简界面](computer-use-observation.md)。它不增加批量输入，也不改变本机授权、停止或 AX 数据边界。
+
 AgentDock 内置的 macOS 桌面能力供连接的 AI 客户端使用：**观察桌面 → 客户端理解和决策 → 执行一个动作 → 再观察验证**。这是独立实现的 Computer Use 工具层，不调用 Codex 插件，也不内置模型或自主规划器。
 
 核心实现为 Go；`internal/tool/desktop/native_darwin.m` 作为原生 cgo 桥接。默认以后台窗口为目标，不激活目标应用，不接管全局鼠标。后台指针使用一个可检测的非公开系统接口，边界见下文。运行不需要 Python、AppleScript、第三方桌面 MCP、Skill 或临时脚本。Swift 菜单栏应用提供配置、实时预览、本机应用授权和暂停/停止面板。

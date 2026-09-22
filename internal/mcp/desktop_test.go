@@ -20,3 +20,22 @@ func TestDesktopSnapshotReturnsImageAndCoordinateMetadata(t *testing.T) {
 		t.Fatal("envelope mutated source result")
 	}
 }
+func TestDesktopActionReturnsObservationImageWithoutBase64InMetadata(t *testing.T) {
+	input := map[string]any{
+		"action": "click", "event_dispatched": true, "application_verified": false,
+		"observation":       map[string]any{"snapshot_id": "fresh", "image": map[string]any{"window_id": 9}},
+		"_mcp_image_base64": "aGVsbG8=", "_mcp_image_mime_type": "image/jpeg",
+	}
+	envelope := toolEnvelope("desktop_act", input, nil)
+	clean := envelope["structuredContent"].(map[string]any)
+	if clean["_mcp_image_base64"] != nil || clean["event_dispatched"] != true || clean["observation"] == nil {
+		t.Fatal(clean)
+	}
+	content := envelope["content"].([]map[string]any)
+	if len(content) != 2 || content[0]["type"] != "text" || content[1]["type"] != "image" {
+		t.Fatal(content)
+	}
+	if input["_mcp_image_base64"] == nil {
+		t.Fatal("source result was mutated")
+	}
+}

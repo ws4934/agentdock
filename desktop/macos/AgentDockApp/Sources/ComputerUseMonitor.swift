@@ -13,7 +13,6 @@ final class ComputerUseMonitor: NSObject, NSWindowDelegate, NSMenuDelegate {
     private let canvas = ComputerUseCanvas()
     private let titleLabel = NSTextField(labelWithString: "")
     private let stateLabel = NSTextField(labelWithString: "")
-    private let detailLabel = NSTextField(labelWithString: "")
     private let pauseButton = NSButton(title: "", target: nil, action: nil)
     private let stopButton = NSButton(title: "", target: nil, action: nil)
     private let collapseButton = NSButton(title: "", target: nil, action: nil)
@@ -56,12 +55,11 @@ final class ComputerUseMonitor: NSObject, NSWindowDelegate, NSMenuDelegate {
         preview.onFrame = { [weak self] image in
             guard let self, self.connected, self.state?.shouldPreview == true, !self.collapsed else { return }
             self.canvas.image = image
-            self.detailLabel.stringValue = L10n.text("Live window preview · local only")
+            self.canvas.message = ""
         }
         preview.onState = { [weak self] message in
             self?.canvas.image = nil
             self?.canvas.message = message
-            self?.detailLabel.stringValue = message
         }
         if let screen = NSScreen.main {
             panel.setFrameTopLeftPoint(NSPoint(x: screen.visibleFrame.maxX - panel.frame.width - 22, y: screen.visibleFrame.maxY - 28))
@@ -75,9 +73,6 @@ final class ComputerUseMonitor: NSObject, NSWindowDelegate, NSMenuDelegate {
         titleLabel.lineBreakMode = .byTruncatingTail
         stateLabel.font = .systemFont(ofSize: 12, weight: .medium)
         stateLabel.textColor = .secondaryLabelColor
-        detailLabel.font = .systemFont(ofSize: 11)
-        detailLabel.textColor = .secondaryLabelColor
-        detailLabel.lineBreakMode = .byTruncatingTail
         pauseButton.target = self; pauseButton.action = #selector(togglePause)
         stopButton.target = self; stopButton.action = #selector(stopAndClose)
         collapseButton.target = self; collapseButton.action = #selector(collapse)
@@ -96,14 +91,14 @@ final class ComputerUseMonitor: NSObject, NSWindowDelegate, NSMenuDelegate {
         let decisions = NSStackView(views: [approveButton, denyButton]); decisions.orientation = .horizontal
         approvalBox.addArrangedSubview(decisions); approvalBox.isHidden = true
         let controls = NSStackView(views: [pauseButton, stepButton, stopButton]); controls.orientation = .horizontal; controls.distribution = .fillEqually; controls.spacing = 8
-        let stack = NSStackView(views: [header, taskLabel, stateLabel, approvalBox, canvas, detailLabel, controls])
+        let stack = NSStackView(views: [header, taskLabel, stateLabel, approvalBox, canvas, controls])
         stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 9
         content.addSubview(stack); stack.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14), stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -14),
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 12), stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -12),
             header.widthAnchor.constraint(equalTo: stack.widthAnchor), canvas.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            canvas.heightAnchor.constraint(greaterThanOrEqualToConstant: 160), controls.widthAnchor.constraint(equalTo: stack.widthAnchor), detailLabel.widthAnchor.constraint(equalTo: stack.widthAnchor)
+            canvas.heightAnchor.constraint(greaterThanOrEqualToConstant: 160), controls.widthAnchor.constraint(equalTo: stack.widthAnchor)
         ])
     }
 
@@ -138,7 +133,6 @@ final class ComputerUseMonitor: NSObject, NSWindowDelegate, NSMenuDelegate {
             case .failure:
                 self.connected = false; self.preview.select(nil); self.canvas.image = nil
                 self.canvas.message = L10n.text("Connection lost. The core pauses when the monitor lease expires.")
-                self.detailLabel.stringValue = self.canvas.message
                 self.pauseButton.isEnabled = false
                 // 暂停也通过心跳保留幂等意图，不在租约过期后反复发送无效命令。
                 if self.closeRequested { self.stateLabel.stringValue = L10n.text("Stop not yet confirmed") }
@@ -154,10 +148,12 @@ final class ComputerUseMonitor: NSObject, NSWindowDelegate, NSMenuDelegate {
         titleLabel.stringValue = next.application.name.isEmpty ? L10n.text("Computer Use") : next.application.name
         taskLabel.stringValue = next.task_label ?? ""
         taskLabel.toolTip = next.task_label
+        taskLabel.isHidden = taskLabel.stringValue.isEmpty
         approvalBox.isHidden = next.pending_application == nil
         if let request = next.pending_application {
             let identity = request.application.app_path ?? request.application.bundle_id
-            approvalLabel.stringValue = L10n.text("Application access requires your approval") + "\n" + request.application.name + " · " + request.mode
+            let mode = request.mode == "foreground" ? L10n.text("Foreground control") : L10n.text("Background window")
+            approvalLabel.stringValue = request.application.name + " · " + mode
             approvalLabel.toolTip = identity
             approvalLabel.stringValue += "\n" + (request.application.bundle_id.isEmpty ? "PID " + String(request.application.pid) : request.application.bundle_id)
             if request.mode == "foreground" { approvalLabel.stringValue += "\n" + L10n.text("Foreground control can affect the desktop.") }
@@ -190,13 +186,10 @@ final class ComputerUseMonitor: NSObject, NSWindowDelegate, NSMenuDelegate {
         if next.phase == "stopped" || next.phase == "completed" || next.phase == "closed" { panel.orderOut(nil) }
         let target = connected && !collapsed && !closeRequested && next.shouldPreview ? next.window : nil
         preview.select(target)
-        if target == nil { canvas.image = nil; canvas.message = phase; detailLabel.stringValue = L10n.text("Stops desktop control only, not other agent tools.") }
+        if target == nil { canvas.image = nil; canvas.message = phase }
         canvas.targetBounds = next.window.bounds
         canvas.point = next.pointer
         if stopIntentID != nil { stateLabel.stringValue = L10n.text("Stop not yet confirmed") }
-        if target != nil && preview.lastFrame != .distantPast && Date().timeIntervalSince(preview.lastFrame) > 2 {
-            detailLabel.stringValue = L10n.text("Frame unchanged · window may be static or minimized")
-        }
     }
     private func outcomeLabel(_ value: String) -> String {
         switch value {

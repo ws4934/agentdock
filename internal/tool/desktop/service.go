@@ -25,6 +25,7 @@ const snapshotTTL = 30 * time.Second
 var desktopGate = make(chan struct{}, 1)
 
 type observed struct {
+	options  SnapshotRequest
 	epoch    uint64
 	mode     string
 	window   Window
@@ -324,6 +325,9 @@ func (s *Service) Act(ctx context.Context, r ActionRequest) (result core.Result,
 	if obs == nil || r.SnapshotID != obs.id || s.now().Sub(obs.at) > snapshotTTL || obs.epoch != 0 && !s.control.valid(ctx, obs.epoch) {
 		return nil, stale("Snapshot is absent, expired, or consumed; call desktop_snapshot before each action")
 	}
+	if r.ObserveAfter && obs.mode != "background" {
+		return nil, invalid("observe_after requires an explicit background window snapshot")
+	}
 	p := s.backend.Permissions()
 	if !p.Accessibility {
 		return nil, permissionError("accessibility")
@@ -339,7 +343,11 @@ func (s *Service) Act(ctx context.Context, r ActionRequest) (result core.Result,
 			return nil, stale("Snapshot expired while awaiting application approval")
 		}
 		s.recordTarget(ctx, obs.state, obs.window, "background")
-		return s.actBackground(ctx, obs, r)
+		result, err = s.actBackground(ctx, obs, r)
+		if err == nil && r.ObserveAfter {
+			s.observeAfter(ctx, obs, result)
+		}
+		return result, err
 	}
 	if r.Action == "set_value" {
 		return nil, invalid("set_value requires a background window snapshot")
