@@ -68,7 +68,7 @@ char *ad_state(void) {
    [displays addObject:@{@"id":@(ids[i]),@"bounds":ad_rect(CGDisplayBounds(ids[i])),@"pixel_width":@(width),@"pixel_height":@(height),@"main":CGDisplayIsMain(ids[i])?@YES:@NO}];
    if(mode)CGDisplayModeRelease(mode);
   }
-  NSMutableArray *windows=[NSMutableArray array];
+  NSMutableArray *windows=[NSMutableArray array];BOOL windowsTruncated=NO;
   NSArray *nativeWindows=CFBridgingRelease(CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly|kCGWindowListExcludeDesktopElements,kCGNullWindowID));
   for(NSDictionary *w in nativeWindows) {
    if([w[(__bridge NSString *)kCGWindowLayer] intValue]!=0)continue;
@@ -76,7 +76,7 @@ char *ad_state(void) {
    if(!CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)w[(__bridge NSString *)kCGWindowBounds],&bounds))continue;
    if(bounds.size.width<=0||bounds.size.height<=0)continue;
    [windows addObject:@{@"id":w[(__bridge NSString *)kCGWindowNumber]?:@0,@"pid":w[(__bridge NSString *)kCGWindowOwnerPID]?:@0,@"title":w[(__bridge NSString *)kCGWindowName]?:@"",@"bounds":ad_rect(bounds)}];
-   if(windows.count>=256)break;
+   if(windows.count>=256){windowsTruncated=YES;break;}
   }
   NSMutableArray *applications=[NSMutableArray array];
   // Process Manager 提供实时 GUI 进程集合；NSWorkspace 数组可能停留在启动时。
@@ -84,12 +84,12 @@ char *ad_state(void) {
   for(int visited=0;visited<4096&&GetNextProcess(&serial)==noErr;visited++) {
    pid_t pid=0;if(GetProcessPID(&serial,&pid)!=noErr)continue;
    NSRunningApplication *app=[NSRunningApplication runningApplicationWithProcessIdentifier:pid];
-   if(!app||app.activationPolicy!=NSApplicationActivationPolicyRegular||app.terminated)continue;
-   [applications addObject:@{@"pid":@(pid),@"name":app.localizedName?:@"",@"bundle_id":app.bundleIdentifier?:@""}];
+   if(!app||app.activationPolicy==NSApplicationActivationPolicyProhibited||app.terminated)continue;
+   [applications addObject:@{@"pid":@(pid),@"name":app.localizedName?:@"",@"bundle_id":app.bundleIdentifier?:@"",@"app_path":app.bundleURL.URLByResolvingSymlinksInPath.URLByStandardizingPath.path?:@""}];
    if(applications.count>=256)break;
   }
   CGEventRef cursorEvent=CGEventCreate(NULL);CGPoint cursor=cursorEvent?CGEventGetLocation(cursorEvent):CGPointZero;if(cursorEvent)CFRelease(cursorEvent);
-  return ad_json(@{@"cursor":@{@"x":@(cursor.x),@"y":@(cursor.y)},@"frontmost_pid":@(ad_frontmost()),@"displays":displays,@"windows":windows,@"applications":applications});
+  return ad_json(@{@"cursor":@{@"x":@(cursor.x),@"y":@(cursor.y)},@"windows_truncated":windowsTruncated?@YES:@NO,@"frontmost_pid":@(ad_frontmost()),@"displays":displays,@"windows":windows,@"applications":applications});
  }
 }
 static int ad_capture_target(uint32_t display,uint32_t window,int pid,int dimension,int timeout_ms,unsigned char **out,size_t *size,int *width,int *height) {
@@ -181,7 +181,7 @@ static NSDictionary *ad_element(AXUIElementRef element,NSArray *path) {
  Boolean settable=false;
  if(!secure&&([role isEqualToString:(__bridge NSString *)kAXTextFieldRole]||[role isEqualToString:(__bridge NSString *)kAXTextAreaRole]))AXUIElementIsAttributeSettable(element,kAXValueAttribute,&settable);
  // 从不读取 AXValue、选中文本或密码；安全文本框的标签也隐藏。
- return @{@"role":role,@"title":secure?@"[redacted]":ad_label(element,kAXTitleAttribute),@"description":secure?@"":ad_label(element,kAXDescriptionAttribute),@"bounds":ad_rect(ad_bounds(element)),@"enabled":([enabled isKindOfClass:NSNumber.class]&&[enabled boolValue])?@YES:@NO,@"pressable":(pressable&&!secure)?@YES:@NO,@"value_settable":settable?@YES:@NO,@"path":path};
+ return @{@"role":role,@"title":secure?@"[redacted]":ad_label(element,kAXTitleAttribute),@"description":secure?@"":ad_label(element,kAXDescriptionAttribute),@"bounds":ad_rect(ad_bounds(element)),@"enabled":([enabled isKindOfClass:NSNumber.class]&&[enabled boolValue])?@YES:@NO,@"enabled_known":[enabled isKindOfClass:NSNumber.class]?@YES:@NO,@"pressable":(pressable&&!secure)?@YES:@NO,@"value_settable":settable?@YES:@NO,@"path":path};
 }
 static void ad_walk(AXUIElementRef node,NSArray *path,NSMutableArray *output,CFMutableSetRef seen,int nodes,int depth,CFAbsoluteTime deadline,BOOL *truncated) {
  if(output.count>=(NSUInteger)nodes||CFAbsoluteTimeGetCurrent()>deadline){*truncated=YES;return;}

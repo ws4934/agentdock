@@ -2,7 +2,7 @@
 
 AgentDock 内置的 macOS 桌面能力供连接的 AI 客户端使用：**观察桌面 → 客户端理解和决策 → 执行一个动作 → 再观察验证**。这是独立实现的 Computer Use 工具层，不调用 Codex 插件，也不内置模型或自主规划器。
 
-核心实现为 Go；`internal/tool/desktop/native_darwin.m` 作为原生 cgo 桥接。默认以后台窗口为目标，不激活目标应用，不接管全局鼠标。后台指针使用一个可检测的非公开系统接口，边界见下文。运行不需要 Python、AppleScript、第三方桌面 MCP、Skill 或临时脚本。现有 Swift 菜单栏应用只新增配置开关。
+核心实现为 Go；`internal/tool/desktop/native_darwin.m` 作为原生 cgo 桥接。默认以后台窗口为目标，不激活目标应用，不接管全局鼠标。后台指针使用一个可检测的非公开系统接口，边界见下文。运行不需要 Python、AppleScript、第三方桌面 MCP、Skill 或临时脚本。Swift 菜单栏应用提供配置、实时预览、本机应用授权和暂停/停止面板。
 
 ## 实时控制小窗
 
@@ -31,7 +31,7 @@ AGENTDOCK_DESKTOP_ENABLED=true ./bin/agentdock --stdio
 
 不要直接替换正在为当前会话提供连接的二进制。安装或重启新版本后，客户端可能需要刷新连接或工具列表。
 
-默认关闭桌面能力；未启用时，仅 `desktop_status` 可用。其他四个工具不会被公开。开启此能力意味着已认证的 MCP 客户端可以申请观察和控制桌面；请保持原有认证、主机权限和网络访问限制。
+默认关闭桌面能力；未启用时，仅 `desktop_status` 可用。其他六个工具不会被公开。开启此能力意味着已认证的 MCP 客户端可以申请观察和控制桌面；请保持原有认证、主机权限和网络访问限制。
 
 ## 系统权限
 
@@ -45,11 +45,19 @@ AGENTDOCK_DESKTOP_ENABLED=true ./bin/agentdock --stdio
 
 | 工具 | 用途 | 是否修改桌面 |
 | --- | --- | --- |
+| `desktop_task` | 声明、检查和结束当前 Core 的独占任务，返回私有 task_id | 任务控制状态 |
+| `desktop_wait` | 等待窗口或 AX 条件，不发送输入、不生成动作快照 | 否 |
 | `desktop_status` | 查询支持状态、启用开关、屏幕录制/辅助功能/Secure Input 状态 | 否，不触发授权 |
 | `desktop_permissions` | 经用户同意请求指定系统权限 | 可能显示系统弹窗 |
 | `desktop_launch` | 按应用名、Bundle ID 或绝对 .app 路径启动/复用应用，默认后台；有界等待窗口 | 是，应用/系统可能显示界面 |
 | `desktop_snapshot` | 默认只列出窗口；选择窗口后截图和可选 AX 树；显式前台观察 | 否 |
 | `desktop_act` | 对快照绑定目标点击、移动、拖拽、滚动、按键、输入或 AX 全量文本替换；激活仅限显式前台模式 | 是 |
+
+## 独占任务和应用授权
+
+正式宿主现在要求先向 `desktop_task` 传入 `{"action":"begin","title":"本次桌面任务的目的"}`，保存返回的私有 `task_id`。**下文简写的应用/快照/动作示例均须额外携带本任务的 `task_id`；只有状态查询和无目标元数据发现例外。** 新应用或切换前台模式必须由本机浮窗批准，不能由模型自批，也不能以系统辅助功能权限代替本次任务授权。
+
+任务完成且没有活动操作后，调用 `desktop_task` 的 `end` 并带回令牌。结束任务不能清除本机停止或清理失败状态；失去令牌时由本机用户停止并释放任务。`desktop_wait` 支持窗口存在/不可见/稳定、控件存在/缺失/启用/禁用，超时和截断不等于成功，不能据此自动重放输入。包含完整 task_id 的调用示例、权限范围和单步语义见 [computer-use-reliability.md](computer-use-reliability.md)。
 
 ## 主动打开应用再操作
 

@@ -96,26 +96,42 @@ func TestNativeInputIsolatedFixture(t *testing.T) {
 		}
 		t.Fatalf("fixture failed verification: %s (clicks=%d scrolls=%d drags=%d releases=%d text_runes=%d)", label, state.Clicks, state.Scrolls, state.Drags, state.Releases, len([]rune(state.Text)))
 	}
-	wait("launch", func(s fixtureState) bool { return s.PID > 0 })
+	wait("launch and self-activation", func(s fixtureState) bool {
+		current, e := b.State(t.Context())
+		return e == nil && s.PID > 0 && s.Active && s.KeyWindow && current.FrontmostPID == s.PID
+	})
 	service := New(true, b)
 	t.Cleanup(func() { _ = service.Close() })
 	noImage := false
-	var activation core.Result
+	// 启动期间窗口几何/焦点会短暂变化。只对“尚未派发”的 STALE_SNAPSHOT 重新观察；
+	// 任何已进入原生动作后的错误都立即失败，不重放可能已发送的输入。
+	activated := false
 	for attempt := 0; attempt < 5; attempt++ {
-		activation, err = service.Snapshot(t.Context(), SnapshotRequest{Mode: "foreground", Screenshot: &noImage})
-		if err == nil {
-			break
+		activation, e := service.Snapshot(t.Context(), SnapshotRequest{Mode: "foreground", Screenshot: &noImage})
+		if e == nil {
+			if activation["state"].(State).FrontmostPID != state.PID {
+				t.Fatal("fixture lost foreground during activation preflight")
+			}
+			_, e = service.Act(t.Context(), ActionRequest{Action: "activate", SnapshotID: activation["snapshot_id"].(string), PID: state.PID})
+			if e == nil {
+				activated = true
+				break
+			}
+			if typed, ok := e.(*core.ToolError); !ok || typed.Code != "STALE_SNAPSHOT" {
+				t.Fatal(e)
+			}
+			current, _ := b.State(t.Context())
+			observed := activation["state"].(State)
+			previousWindow, _ := targetWindow(observed)
+			currentWindow, _ := targetWindow(current)
+			t.Logf("un-dispatched activation invalidated: observed_pid=%d current_pid=%d observed_window=%d current_window=%d", observed.FrontmostPID, current.FrontmostPID, previousWindow.ID, currentWindow.ID)
+		} else if typed, ok := e.(*core.ToolError); !ok || typed.Code != "STALE_SNAPSHOT" {
+			t.Fatal(e)
 		}
-		if typed, ok := err.(*core.ToolError); !ok || typed.Code != "STALE_SNAPSHOT" {
-			t.Fatal(err)
-		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(120 * time.Millisecond)
 	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.Act(t.Context(), ActionRequest{Action: "activate", SnapshotID: activation["snapshot_id"].(string), PID: state.PID}); err != nil {
-		t.Fatal(err)
+	if !activated {
+		t.Fatal("fixture activation could not obtain stable preflight; no input retry was performed")
 	}
 	time.Sleep(300 * time.Millisecond)
 	snapshot := func() core.Result {

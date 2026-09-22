@@ -244,6 +244,8 @@ Apache License 2.0. See [LICENSE](./LICENSE).
 
 ## 原生 macOS Computer Use
 
+桌面调用现在要求 `desktop_task` 独占任务令牌和本机按任务的应用/模式授权；`desktop_wait` 只观察明确条件，不重放输入。停止/暂停意图跨瞬时通信故障保留，输入释放失败锁存；本机面板新增单步执行和有界操作时间线。详见[可靠执行与任务范围](docs/computer-use-reliability.md)。
+
 macOS 14+ 可选启用内置桌面观察与控制：截图、显示器/窗口信息、Accessibility 控件、鼠标、拖拽、滚动、快捷键及 Unicode 输入。核心为 Go + 系统 API，不依赖 Skill、Python、AppleScript 或 Codex MCP。功能默认关闭，在 Mac 高级设置中启用，或设置 `AGENTDOCK_DESKTOP_ENABLED=true`；macOS 构建需要 CGO。
 
 可先用 `desktop_launch` 按应用名、Bundle ID 或绝对 `.app` 路径主动打开应用（默认后台，复用已运行实例），取得 PID/窗口后再观察和操作。启动与窗口就绪分开报告，超时不自动重启或切换前台。

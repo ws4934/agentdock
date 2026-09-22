@@ -25,6 +25,30 @@ final class ComputerUsePreview: NSObject, SCStreamOutput, SCStreamDelegate {
     private var stream: SCStream?
     private var revision = 0
     private var selected: ComputerUseWindow?
+    private var starting = false
+    private var attempts = 0
+    private var streamStarted = Date.distantPast
+    private var retryAt = Date.distantPast
+    private(set) var requiresUserRestart = false
+    private let permissionCheck: () -> Bool
+    private let contentProvider: () async throws -> SCShareableContent
+    var clock: () -> Date = Date.init
+
+    init(permissionCheck: @escaping () -> Bool = { CGPreflightScreenCaptureAccess() }, contentProvider: @escaping () async throws -> SCShareableContent = { try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true) }) {
+        self.permissionCheck = permissionCheck; self.contentProvider = contentProvider
+        super.init()
+    }
+    func retryByUser() { requiresUserRestart = false; attempts = 0; retryAt = .distantPast }
+    private func failed(_ error: Error?) {
+        starting = false
+        if !permissionCheck() { requiresUserRestart = true }
+        if let error = error as NSError?, error.domain == SCStreamErrorDomain {
+            // 用户停止/拒绝和缺少权限属于显式边界，不能按瞬时网络错误自动恢复。
+            if error.code == SCStreamError.Code.userDeclined.rawValue || error.code == SCStreamError.Code.missingEntitlements.rawValue { requiresUserRestart = true }
+            if #available(macOS 14.0, *), error.code == SCStreamError.Code.userStopped.rawValue { requiresUserRestart = true }
+        }
+        retryAt = clock().addingTimeInterval(min(4, pow(2, Double(max(0, attempts - 1))) * 0.5))
+    }
     private let outputQueue = DispatchQueue(label: "agentdock.computer-use.preview", qos: .utility)
     nonisolated private let frameSlot = ComputerUseFrameSlot()
     nonisolated private let imageContext = CIContext(options: [.cacheIntermediates: false])
@@ -34,23 +58,27 @@ final class ComputerUsePreview: NSObject, SCStreamOutput, SCStreamDelegate {
     private(set) var frameCount = 0
 
     func select(_ target: ComputerUseWindow?) {
-        guard target != selected else { return }
+        if target != selected { attempts = 0; retryAt = .distantPast }
+        else if target == nil || stream != nil || starting || attempts >= 4 || clock() < retryAt || requiresUserRestart { return }
         selected = target
+        if target != nil && requiresUserRestart { return }
         revision += 1
         let token = revision
         let old = stream
         stream = nil
         lastFrame = .distantPast
+        starting = target != nil
+        if target != nil { attempts += 1 }
         Task { [weak self] in
             try? await old?.stopCapture()
             guard let self, self.revision == token, let target, target.id > 0 else { return }
             // 不弹出权限请求。缺权限时由现有的权限设置流程让用户主动授权。
-            guard CGPreflightScreenCaptureAccess() else { self.onState?(L10n.text("Preview needs Screen Recording permission.")); return }
+            guard self.permissionCheck() else { self.failed(nil); self.onState?(L10n.text("Preview needs Screen Recording permission.")); return }
             do {
-                let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+                let content = try await self.contentProvider()
                 guard self.revision == token else { return }
                 guard let window = content.windows.first(where: { $0.windowID == target.id && $0.owningApplication?.processID == target.pid }) else {
-                    self.onState?(L10n.text("Target window is unavailable.")); return
+                    self.failed(nil); self.onState?(L10n.text("Target window is unavailable.")); return
                 }
                 let config = SCStreamConfiguration()
                 let ratio = min(1, 960 / max(window.frame.width, window.frame.height))
@@ -63,13 +91,15 @@ final class ComputerUsePreview: NSObject, SCStreamOutput, SCStreamDelegate {
                 if #available(macOS 14.0, *) { config.ignoreShadowsSingleWindow = true }
                 let next = SCStream(filter: SCContentFilter(desktopIndependentWindow: window), configuration: config, delegate: self)
                 try next.addStreamOutput(self, type: .screen, sampleHandlerQueue: self.outputQueue)
-                self.stream = next
+                self.stream = next; self.streamStarted = self.clock()
                 self.onState?(L10n.text("Waiting for live preview…"))
                 try await next.startCapture()
+                if self.revision == token { self.starting = false }
                 if self.revision != token { try? await next.stopCapture() }
             } catch {
                 guard self.revision == token else { return }
                 self.stream = nil
+                self.failed(error)
                 self.onState?(L10n.text("Live preview is unavailable. Control can still be stopped."))
             }
         }
@@ -79,6 +109,7 @@ final class ComputerUsePreview: NSObject, SCStreamOutput, SCStreamDelegate {
         Task { @MainActor [weak self] in
             guard let self, self.stream === stream else { return }
             self.stream = nil
+            self.failed(error)
             self.onState?(L10n.text("Live preview stopped. Control can still be stopped."))
         }
     }
@@ -94,6 +125,7 @@ final class ComputerUsePreview: NSObject, SCStreamOutput, SCStreamDelegate {
         Task { @MainActor [weak self, frameSlot] in
             guard let (latest, source) = frameSlot.take(), let self, self.stream === source else { return }
             self.lastFrame = Date()
+            if self.clock().timeIntervalSince(self.streamStarted) >= 2 { self.attempts = 0 }
             self.frameCount += 1
             self.onFrame?(latest)
         }

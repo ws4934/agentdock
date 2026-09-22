@@ -13,7 +13,7 @@ import (
 
 // RequireDesktopMonitor 只由宿主入口启用；嵌入式测试可使用无 UI 的独立 Runtime。
 // 正式 CLI/HTTP 服务不提供远程关闭监视器或恢复停止状态的 MCP 方法。
-func (r *Runtime) RequireDesktopMonitor() { r.desktop.RequireMonitor() }
+func (r *Runtime) RequireDesktopMonitor() { r.desktop.RequireMonitor(); r.desktop.RequireTaskScope() }
 func (r *Runtime) LocalDesktopControl(_ context.Context, request desktopcontrol.Request) (any, error) {
 	if request.Method != "computeruse.poll" && request.Method != "computeruse.command" {
 		return nil, fmt.Errorf("unsupported local Computer Use method")

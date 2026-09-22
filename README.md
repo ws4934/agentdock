@@ -241,6 +241,8 @@ Apache License 2.0. See [LICENSE](./LICENSE).
 
 ## Native macOS Computer Use
 
+Desktop calls now use an exclusive `desktop_task` capability, local per-task application/mode approval and read-only `desktop_wait` predicates. Stop/pause intentions survive transient IPC loss, input-release failures stay blocked for manual acknowledgment, and the panel provides single-step execution and bounded operation history. See [reliable execution and task scope](docs/computer-use-reliability.md).
+
 An opt-in native desktop capability for macOS 14+: screenshots, displays/windows, Accessibility elements, pointer actions, dragging, scrolling, shortcuts, and Unicode typing. The implementation uses Go plus a thin system API bridge, not a Skill, Python, AppleScript, or a Codex MCP dependency. Enable it in the Mac advanced settings or set `AGENTDOCK_DESKTOP_ENABLED=true`; macOS builds require CGO.
 
 Use `desktop_launch` to open an installed app by exact name, bundle ID, or absolute `.app` path (background by default, existing instances reused), then observe a returned window before acting. Launch and window readiness are reported separately; there is no automatic relaunch or foreground fallback.

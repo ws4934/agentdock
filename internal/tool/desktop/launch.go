@@ -18,6 +18,7 @@ import (
 // 启动独立于输入快照：应用尚未运行时没有可用于操作的窗口。
 // 启动结果不授权输入，后续仍须重新观察选定窗口。
 type LaunchRequest struct {
+	TaskID   string `json:"task_id,omitempty"`
 	BundleID string `json:"bundle_id,omitempty"`
 	AppPath  string `json:"app_path,omitempty"`
 	AppName  string `json:"app_name,omitempty"`
@@ -81,6 +82,7 @@ func normalizeLaunch(r LaunchRequest) (LaunchRequest, error) {
 }
 
 func (s *Service) Launch(ctx context.Context, r LaunchRequest) (core.Result, error) {
+	ctx = taskContext(ctx, r.TaskID)
 	ctx, finish, err := s.begin(ctx)
 	if err != nil {
 		return nil, err
@@ -112,7 +114,6 @@ func (s *Service) Launch(ctx context.Context, r LaunchRequest) (core.Result, err
 	if err != nil {
 		return nil, err
 	}
-	s.control.target(ctx, Window{}, r.Mode, Application{Name: target.Name, BundleID: target.BundleID})
 	before, err := s.backend.State(ctx)
 	if err != nil {
 		return nil, err
@@ -123,7 +124,11 @@ func (s *Service) Launch(ctx context.Context, r LaunchRequest) (core.Result, err
 	if err = ctx.Err(); err != nil {
 		return nil, err
 	}
+	if err = s.control.authorize(ctx, Application{Name: target.Name, BundleID: target.BundleID, Path: target.AppPath}, r.Mode); err != nil {
+		return nil, err
+	}
 	s.invalidate()
+	s.control.target(ctx, Window{}, r.Mode, Application{Name: target.Name, BundleID: target.BundleID})
 	start := s.now()
 	launched, err := backend.LaunchApplication(ctx, target, r.Mode)
 	outcome := "launched_or_reused"

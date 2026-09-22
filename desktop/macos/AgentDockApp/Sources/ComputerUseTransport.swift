@@ -1,11 +1,15 @@
 import Foundation
+import AppKit
 import Darwin
 
 struct ComputerUsePoint: Codable, Equatable { let x: Double; let y: Double }
 struct ComputerUseRect: Codable, Equatable { let x: Double; let y: Double; let width: Double; let height: Double }
 struct ComputerUseWindow: Codable, Equatable { let id: UInt32; let pid: Int32; let title: String; let bounds: ComputerUseRect }
-struct ComputerUseApplication: Codable { let pid: Int32; let name: String; let bundle_id: String }
+struct ComputerUseApplication: Codable { let pid: Int32; let name: String; let bundle_id: String; let app_path: String? }
+struct ComputerUseApproval: Decodable { let id: String; let application: ComputerUseApplication; let mode: String }
+struct ComputerUseEvent: Decodable { let sequence: UInt64; let activity: String; let pid: Int32; let window_id: UInt32; let outcome: String; let elapsed_ms: Int64 }
 struct ComputerUseState: Decodable {
+    let recent_operations: [ComputerUseEvent]?
     let enabled: Bool
     let monitor_required: Bool
     let monitor_connected: Bool
@@ -21,8 +25,13 @@ struct ComputerUseState: Decodable {
     let active_operations: Int
     let reason: String
     let can_resume: Bool
+    let cleanup_failed: Bool?
+    let task_label: String?
+    let task_reference: String?
+    let pending_application: ComputerUseApproval?
+    let step_mode: Bool?
 
-    var isLive: Bool { ["running", "pausing", "stopping", "paused"].contains(phase) }
+    var isLive: Bool { ["running", "pausing", "stopping", "paused", "cleanup_failed"].contains(phase) }
     var isDraining: Bool { phase == "pausing" || phase == "stopping" }
     var shouldPreview: Bool { phase == "running" && window.id > 0 }
 }
@@ -31,14 +40,19 @@ struct ComputerUseTransport {
     let socketPath: String
     let controllerID: String
 
-    func call(operation: String? = nil, sessionID: String = "", visibleID: String = "") async throws -> ComputerUseState {
-        try await Task.detached(priority: .userInitiated) {
-            try self.callSync(operation: operation, sessionID: sessionID, visibleID: visibleID)
-        }.value
+    // 心跳在主RunLoop的公共/跟踪模式启动；IPC在工作线程执行，回包通过RunLoop投递。
+    // 不依赖嵌套AppKit菜单循环期间可能暂停的Swift MainActor任务队列。
+    func exchange(operation: String? = nil, sessionID: String = "", visibleID: String = "", stopSessionID: String = "", approvalID: String = "", pauseSessionID: String = "", completion: @escaping @MainActor (Result<ComputerUseState, Error>) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = Result { try self.callSync(operation: operation, sessionID: sessionID, visibleID: visibleID, stopSessionID: stopSessionID, approvalID: approvalID, pauseSessionID: pauseSessionID) }
+            RunLoop.main.perform(inModes: [.common, .eventTracking, .modalPanel]) {
+                MainActor.assumeIsolated { completion(result) }
+            }
+        }
     }
 
     // 每次请求独立连接并发送 EOF。只有受本机文件权限保护的 Unix socket，无 HTTP 监听。
-    func callSync(operation: String? = nil, sessionID: String = "", visibleID: String = "") throws -> ComputerUseState {
+    func callSync(operation: String? = nil, sessionID: String = "", visibleID: String = "", stopSessionID: String = "", approvalID: String = "", pauseSessionID: String = "") throws -> ComputerUseState {
         struct Reply: Decodable {
             struct Failure: Decodable { let message: String }
             let id: String
@@ -67,8 +81,11 @@ struct ComputerUseTransport {
         }
         guard connected == 0 else { throw TransportError(message: "Local Computer Use service unavailable") }
         let id = UUID().uuidString
-        var params = ["controller_id": controllerID, "session_id": sessionID, "visible_session_id": visibleID]
+        var params: [String: Any] = ["controller_pid": ProcessInfo.processInfo.processIdentifier, "controller_id": controllerID, "session_id": sessionID, "visible_session_id": visibleID]
         if let operation { params["operation"] = operation }
+        if !stopSessionID.isEmpty { params["stop_session_id"] = stopSessionID }
+        if !approvalID.isEmpty { params["approval_id"] = approvalID }
+        if !pauseSessionID.isEmpty { params["pause_session_id"] = pauseSessionID }
         let payload = try JSONSerialization.data(withJSONObject: ["id": id, "method": operation == nil ? "computeruse.poll" : "computeruse.command", "params": params])
         try payload.withUnsafeBytes { raw in
             var written = 0

@@ -27,16 +27,18 @@ type Window struct {
 	Bounds Rect   `json:"bounds"`
 }
 type Application struct {
+	Path     string `json:"app_path,omitempty"`
 	PID      int    `json:"pid"`
 	Name     string `json:"name"`
 	BundleID string `json:"bundle_id"`
 }
 type State struct {
-	Cursor       Point         `json:"cursor"`
-	FrontmostPID int           `json:"frontmost_pid"`
-	Displays     []Display     `json:"displays"`
-	Windows      []Window      `json:"windows"`
-	Applications []Application `json:"applications"`
+	WindowsTruncated bool          `json:"windows_truncated"`
+	Cursor           Point         `json:"cursor"`
+	FrontmostPID     int           `json:"frontmost_pid"`
+	Displays         []Display     `json:"displays"`
+	Windows          []Window      `json:"windows"`
+	Applications     []Application `json:"applications"`
 }
 type Permissions struct {
 	ScreenRecording bool `json:"screen_recording"`
@@ -44,6 +46,7 @@ type Permissions struct {
 	SecureInput     bool `json:"secure_input"`
 }
 type Element struct {
+	EnabledKnown  bool   `json:"enabled_known"`
 	ID            string `json:"id"`
 	Role          string `json:"role"`
 	Title         string `json:"title"`
@@ -83,6 +86,7 @@ type Backend interface {
 }
 
 type SnapshotRequest struct {
+	TaskID        string `json:"task_id,omitempty"`
 	Mode          string `json:"mode,omitempty"`
 	WindowID      uint32 `json:"window_id,omitempty"`
 	PID           int    `json:"pid,omitempty"`
@@ -94,9 +98,11 @@ type SnapshotRequest struct {
 	MaxDepth      int    `json:"max_depth,omitempty"`
 }
 type PermissionRequest struct {
+	TaskID     string `json:"task_id,omitempty"`
 	Permission string `json:"permission"`
 }
 type ActionRequest struct {
+	TaskID     string   `json:"task_id,omitempty"`
 	Action     string   `json:"action"`
 	SnapshotID string   `json:"snapshot_id"`
 	PID        int      `json:"pid,omitempty"`

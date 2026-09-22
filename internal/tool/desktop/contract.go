@@ -3,6 +3,8 @@ package desktop
 import "github.com/uvwt/agentdock/internal/tool/contract"
 
 const (
+	ToolWait        = "desktop_wait"
+	ToolTask        = "desktop_task"
 	ToolStatus      = "desktop_status"
 	ToolLaunch      = "desktop_launch"
 	ToolPermissions = "desktop_permissions"
@@ -12,7 +14,14 @@ const (
 
 func InputSchema(name string) (map[string]any, bool) {
 	props := map[string]any{}
+	if name != ToolStatus {
+		props["task_id"] = map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Private capability returned by desktop_task begin; required by the production host. Never copy another task's ID."}
+	}
 	switch name {
+	case ToolWait:
+		return waitInputSchema(props), true
+	case ToolTask:
+		return taskInputSchema(props), true
 	case ToolStatus:
 		return contract.InputObject(props), true
 	case ToolLaunch:
@@ -83,6 +92,10 @@ func when(action string, then map[string]any) map[string]any {
 }
 func OutputSchema(name string) (map[string]any, bool) {
 	switch name {
+	case ToolTask:
+		return contract.OutputObject(map[string]any{"action": contract.String("Task action."), "task_id": contract.String("Private task capability, returned only on begin."), "task_reference": contract.String("Public reference for the local UI."), "ended": contract.Boolean("Whether the task was released."), "control_session": contract.OpenObject("Current control status.")}, "action"), true
+	case ToolWait:
+		return contract.OutputObject(map[string]any{"condition": contract.String("Condition checked."), "met": contract.Boolean("Predicate established by observation."), "condition_verified": contract.Boolean("Predicate verified; not business success."), "timed_out": contract.Boolean("Condition not established before deadline."), "outcome": contract.String("met or timeout"), "elapsed_ms": contract.Integer("Elapsed milliseconds."), "observations": contract.Integer("Bounded observations performed."), "last_observation": contract.OpenObject("Window/AX match count, completeness and reason."), "application_verified": contract.Boolean("Always false; observation does not establish business completion."), "input_dispatched": contract.Boolean("Always false."), "next_required_action": contract.String("Take a fresh desktop_snapshot before input.")}, "condition", "met", "condition_verified", "timed_out", "input_dispatched"), true
 	case ToolStatus, ToolPermissions:
 		return contract.OutputObject(map[string]any{
 			"control_session": contract.OpenObject("Local Computer Use session, monitor connection and pause/stop state. Local-only controls; model cannot resume."), "background_pointer": contract.OpenObject("Native pointer bridge availability, private API dependency and upgrade stability."), "default_mode": contract.String("Default desktop mode."), "background_policy": contract.String("Background safety and compatibility boundary."),

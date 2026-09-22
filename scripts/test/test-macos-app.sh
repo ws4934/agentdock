@@ -16,6 +16,15 @@ trap cleanup EXIT
 
 python3 "$ROOT_DIR/scripts/test/check-macos-i18n.py"
 
+swiftc -swift-version 5 -parse-as-library \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/Localization.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ComputerUseTransport.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ComputerUsePreview.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Tests/ComputerUsePreviewTests.swift" \
+  -o "$TMP_ROOT/computer-use-preview-tests"
+"$TMP_ROOT/computer-use-preview-tests"
+
+
 swiftc \
   -swift-version 5 \
   -parse-as-library \

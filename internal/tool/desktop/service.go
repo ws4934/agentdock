@@ -108,6 +108,7 @@ func permissionError(name string) error {
 	return core.NewErrorDetails("PERMISSION_REQUIRED", "macOS permission required: "+name, "permission", map[string]any{"permission": name, "settings": "System Settings > Privacy & Security", "user_action_required": true})
 }
 func (s *Service) RequestPermission(ctx context.Context, r PermissionRequest) (core.Result, error) {
+	ctx = taskContext(ctx, r.TaskID)
 	ctx, finish, beginErr := s.begin(ctx)
 	if beginErr != nil {
 		return nil, beginErr
@@ -155,6 +156,7 @@ func lockDesktop(ctx context.Context) error {
 func unlockDesktop()           { <-desktopGate }
 func (s *Service) invalidate() { s.mu.Lock(); s.latest = nil; s.mu.Unlock() }
 func (s *Service) Snapshot(ctx context.Context, r SnapshotRequest) (core.Result, error) {
+	ctx = taskContext(ctx, r.TaskID)
 	ctx, finish, beginErr := s.begin(ctx)
 	if beginErr != nil {
 		return nil, beginErr
@@ -208,7 +210,12 @@ func (s *Service) Snapshot(ctx context.Context, r SnapshotRequest) (core.Result,
 		return nil, core.NewError("NO_DESKTOP_SESSION", "No foreground application is available; ensure an interactive desktop and retry after focus settles", "desktop")
 	}
 	if w, ok := targetWindow(state); ok {
+		if err := s.authorizeWindow(ctx, state, w, "foreground"); err != nil {
+			return nil, err
+		}
 		s.recordTarget(ctx, state, w, "foreground")
+	} else if s.control.scopeRequired() {
+		return nil, controlError("DESKTOP_TARGET_REQUIRED", "Foreground observation requires an identifiable target window before approval")
 	}
 	var display Display
 	for _, d := range state.Displays {
@@ -289,6 +296,7 @@ func sameTarget(a, b State) bool {
 	return aok == bok && aw.ID == bw.ID && aw.Bounds == bw.Bounds
 }
 func (s *Service) Act(ctx context.Context, r ActionRequest) (result core.Result, err error) {
+	ctx = taskContext(ctx, r.TaskID)
 	ctx, finish, beginErr := s.begin(ctx)
 	if beginErr != nil {
 		return nil, beginErr
@@ -324,6 +332,13 @@ func (s *Service) Act(ctx context.Context, r ActionRequest) (result core.Result,
 		return nil, core.NewError("SECURE_INPUT", "Secure Input is active; keyboard injection is unavailable", "permission")
 	}
 	if obs.mode == "background" {
+		if err := s.authorizeWindow(ctx, obs.state, obs.window, "background"); err != nil {
+			return nil, err
+		}
+		if s.now().Sub(obs.at) > snapshotTTL {
+			return nil, stale("Snapshot expired while awaiting application approval")
+		}
+		s.recordTarget(ctx, obs.state, obs.window, "background")
 		return s.actBackground(ctx, obs, r)
 	}
 	if r.Action == "set_value" {
@@ -336,6 +351,15 @@ func (s *Service) Act(ctx context.Context, r ActionRequest) (result core.Result,
 	if !sameTarget(obs.state, current) {
 		s.invalidate()
 		return nil, stale("Foreground application, window, or display geometry changed")
+	}
+	if w, ok := targetWindow(current); ok {
+		if err := s.authorizeWindow(ctx, current, w, "foreground"); err != nil {
+			return nil, err
+		}
+		s.recordTarget(ctx, current, w, "foreground")
+	}
+	if s.now().Sub(obs.at) > snapshotTTL {
+		return nil, stale("Snapshot expired while awaiting foreground approval")
 	}
 	if r.Action == "scroll" && (r.Point != nil || r.Space != "") {
 		return nil, invalid("foreground scroll uses the real cursor; point is only supported in background mode")
@@ -390,9 +414,10 @@ func (s *Service) Act(ctx context.Context, r ActionRequest) (result core.Result,
 			outcome = "failed_or_partial"
 		}
 		// 不记录输入正文、按键内容、窗口标题、AX 内容或截图。
+		s.control.actionOutcome(ctx, err)
 		slog.Info("desktop action", "action", r.Action, "target_pid", obs.state.FrontmostPID, "outcome", outcome, "elapsed_ms", s.now().Sub(started).Milliseconds())
 		if err != nil {
-			err = core.NewErrorDetails("DESKTOP_ACTION_FAILED", err.Error(), "desktop", map[string]any{"action": r.Action, "may_have_dispatched": true, "retry_instruction": "Observe the desktop again; do not automatically replay this action."})
+			err = core.NewErrorDetails("DESKTOP_ACTION_FAILED", err.Error(), "desktop", map[string]any{"action": r.Action, "may_have_dispatched": true, "cleanup_failed": cleanupFailed(err), "retry_instruction": "Observe the desktop again; do not automatically replay this action."})
 		}
 	}()
 	if r.Point != nil {
@@ -408,7 +433,9 @@ func (s *Service) Act(ctx context.Context, r ActionRequest) (result core.Result,
 	}
 	switch r.Action {
 	case "activate":
-		err = s.backend.Activate(ctx, r.PID)
+		if err = s.authorizeWindow(ctx, current, Window{PID: r.PID}, "foreground"); err == nil {
+			err = s.backend.Activate(ctx, r.PID)
+		}
 	case "click":
 		if r.ElementID != "" {
 			err = s.backend.Press(ctx, pid, element)

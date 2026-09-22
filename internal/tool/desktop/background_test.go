@@ -21,7 +21,7 @@ type fakeWindowBackend struct {
 func windowFixture() *fakeWindowBackend {
 	b := fixtureBackend()
 	b.state.Windows = append(b.state.Windows, Window{ID: 9, PID: 20, Bounds: Rect{X: 200, Y: 150, Width: 500, Height: 300}})
-	b.tree.Elements = append(b.tree.Elements, Element{Role: "AXTextField", Enabled: true, ValueSettable: true, Path: []int{1}})
+	b.tree.Elements = append(b.tree.Elements, Element{Role: "AXTextField", EnabledKnown: true, Enabled: true, ValueSettable: true, Path: []int{1}})
 	return &fakeWindowBackend{fakeBackend: b}
 }
 func (b *fakeWindowBackend) CaptureWindow(ctx context.Context, w Window, n int) (Capture, error) {
@@ -62,7 +62,7 @@ func TestBackgroundDefaultDiscoveryCannotAuthorizeInput(t *testing.T) {
 		t.Fatal(r)
 	}
 	_, e = s.Act(t.Context(), ActionRequest{Action: "key", Key: "a", SnapshotID: r["snapshot_id"].(string)})
-	requireCode(t, e, "INVALID_ARGUMENT")
+	requireCode(t, e, "STALE_SNAPSHOT")
 	if len(b.events)+len(b.inputs) != 0 {
 		t.Fatal("discovery dispatched input")
 	}

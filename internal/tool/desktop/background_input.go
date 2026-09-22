@@ -2,6 +2,7 @@ package desktop
 
 import (
 	"context"
+	"errors"
 	"github.com/uvwt/agentdock/internal/tool/core"
 	"log/slog"
 	"math"
@@ -97,9 +98,10 @@ func (s *Service) actBackground(ctx context.Context, obs *observed, r ActionRequ
 		if err != nil {
 			outcome = "failed_or_partial"
 		}
+		s.control.actionOutcome(ctx, err)
 		slog.Info("desktop action", "mode", "background", "action", r.Action, "target_pid", obs.window.PID, "window_id", obs.window.ID, "outcome", outcome, "elapsed_ms", s.now().Sub(started).Milliseconds())
 		if err != nil {
-			err = core.NewErrorDetails("DESKTOP_ACTION_FAILED", err.Error(), "desktop", map[string]any{"mode": "background", "action": r.Action, "may_have_dispatched": true, "foreground_fallback": false, "retry_instruction": "Observe again; do not automatically replay or activate the target."})
+			err = core.NewErrorDetails("DESKTOP_ACTION_FAILED", err.Error(), "desktop", map[string]any{"mode": "background", "action": r.Action, "may_have_dispatched": true, "foreground_fallback": false, "cleanup_failed": cleanupFailed(err), "retry_instruction": "Observe again; do not automatically replay or activate the target."})
 		}
 	}()
 	dispatch := func(c context.Context, in WindowInput) error {
@@ -161,17 +163,17 @@ func dragSequence(ctx context.Context, path []Point, duration int, mouse func(co
 		duration = 500
 	}
 	pos := path[0]
-	if err = mouse(ctx, "down", pos); err != nil {
-		return err
-	}
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		releaseErr := mouse(cleanup, "up", pos)
-		if err == nil {
-			err = releaseErr
+		if releaseErr != nil {
+			err = errors.Join(err, &InputCleanupError{Cause: releaseErr})
 		}
 	}()
+	if err = mouse(ctx, "down", pos); err != nil {
+		return err
+	}
 	steps := max(len(path)-1, duration/16)
 	for i := 1; i <= steps; i++ {
 		timer := time.NewTimer(time.Duration(duration) * time.Millisecond / time.Duration(steps))
@@ -191,3 +193,10 @@ func dragSequence(ctx context.Context, path []Point, duration int, mouse func(co
 	}
 	return nil
 }
+
+// 清理错误不得被主动作取消掩盖；调用方可据此锁存人工处理状态。
+type InputCleanupError struct{ Cause error }
+
+func (e *InputCleanupError) Error() string { return "Input release failed: " + e.Cause.Error() }
+func (e *InputCleanupError) Unwrap() error { return e.Cause }
+func cleanupFailed(err error) bool         { var failure *InputCleanupError; return errors.As(err, &failure) }

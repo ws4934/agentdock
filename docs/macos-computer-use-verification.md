@@ -1,5 +1,48 @@
 # macOS Computer Use 验收记录
 
+## 最新：五项缺陷修复、条件等待与任务范围（2026-09-21 本机时间）
+
+开发基线 `3c169a8`；分支 `feat/native-macos-computer-use`。本轮设计见 [computer-use-reliability.md](computer-use-reliability.md)。环境仍为 macOS 27.0（26A428）/ Apple Silicon，Go 1.26.5，CLT SDK 26.5。没有替换、安装或重启正在提供连接的 AgentDock。
+
+### 修复及新增能力
+
+原审查 A1–A5 均已有正式回归：停止请求丢失后保留本机停止意图；拖拽取消中的抬起错误独立上报并锁存人工清理；启动前置失败不污染显示目标，动作执行时恢复有效快照的目标；菜单跟踪模式中的心跳和回包不再依赖延迟的 MainActor Task；预览对瞬时错误有界重试，对用户停止/拒绝/权限错误保持本机重试边界。
+
+新增 `desktop_wait` 的窗口/控件谓词验证、`desktop_task` 独占能力令牌、当前任务内按精确应用身份和模式的本机批准/拒绝、单步执行、固定紧急停止热键与最多32条内存操作元数据。标准正式入口同时要求本机监视器与任务范围，旧客户端没有 task_id 不会被自动放行。
+
+### 本轮实际验证结果
+
+| 检查 | 实际结果与证据 |
+| --- | --- |
+| 全仓库 race | `go test -race ./... -count=1 -timeout=3m` 通过，`race.exit=0`。包含 Core 清理/目标一致性故障路径、任务所有权、本机批准、前后台范围分离、未知应用拒绝、单步预算、有界历史、等待截断/歧义/未知 AXEnabled 和 Runtime 契约；Swift 故障路径由下列专用用例覆盖。 |
+| 静态检查与无 CGO | `go vet ./...`、desktop/app/mcp 无 CGO 回归均退出码0。既有原生 Process Manager deprecation 告警没有隐藏。 |
+| 多平台构建 | macOS arm64/amd64 CGO，以及 Linux/Windows amd64 无 CGO 构建全部退出码0；真实桌面输入只在本机 arm64 验收。 |
+| Swift 传输与跟踪模式故障 | `TestNativeComputerUseFaultRegressions` 真实运行专用面板和测试 socket，通过（14.48秒），没有向真实应用发送输入。丢失首次 stop 后心跳仍携带停止意图；4.2秒事件跟踪不触发误断连。 |
+| 预览状态机故障 | `ComputerUsePreviewTests` 进入正式 Mac 打包门禁并通过；依赖注入验证同目标退避重试、4次上限、用户显式重试，以及 userDeclined/missingEntitlements/userStopped 不能通过重新选目标自动恢复；不实际采集屏幕。 |
+| 原生浮窗 + 授权 + 等待 + 单步 | `TestNativeComputerUseMonitor` 连续两次真实通过（18.94秒、17.72秒）。真实授权卡片批准后才捕获/读 AX；控件启用条件成立；一步许可仅执行一次输入，自动暂停；旧快照失效；关闭中取消拖拽并释放原目标；面板消失后核心暂停。 |
+| 后台和前台原生操作 | `TestNativeBackgroundTwoApplications`（3.97秒）、`TestNativeBackgroundForegroundRefusal`（0.11秒）、`TestNativeInputIsolatedFixture`（5.24秒）真实通过。前台启动时存在未派发的 STALE_SNAPSHOT，测试仅重新观察该前置拒绝，不重放原生输入失败。 |
+| 应用启动与只读/MCP | 原生 MCP 应用启动流程通过（5.06秒）；真实只读桌面、名称/Bundle ID/路径解析及 MCP JPEG 传输均通过，没有跳过。 |
+| Mac 应用打包 | `scripts/test/test-macos-app.sh` 退出码0，含预览回归、Swift/配置/本地化、原生 Core 构建、ad-hoc 签名核验、DMG/ZIP 与挂载检查。不等于正式 Developer ID 公证发布。 |
+| 文本与格式 | `git diff --check`、gofmt、本地化校验通过；402个引用键、每种语言418条记录。 |
+
+日志、退出码、独立构建和专用面板截图保存在 `.git/computer-use/reliability/`，不会进入 Git 或公开发布。`faults.log`、`gui-final.log`、`input.log`、`launch.log`、`readonly.log`、`packaging.log` 对应上述记录。原失败日志保留，未将退出码为0的跳过冒充真实通过。
+
+### 验证中修正的测试前置条件
+
+本机批准卡片和“恢复”按钮由异步状态回包更新，不能只看核心状态就假设按钮已经显示。原生测试现在等待面板报告的 approval_id 与核心待批准请求完全匹配、等待面板 can_resume 后再调用真实按钮 selector。此前超时不是取消原生授权检查来解决的。
+
+前台测试应用启动时，窗口几何可能在一次稳定快照之后继续变化。测试只对 **派发前返回的 STALE_SNAPSHOT** 做有界重新观察；任何 `DESKTOP_ACTION_FAILED` 等可能已发送输入的错误立即失败。生产的目标/快照校验没有放宽。
+
+### 明确未作保证的范围
+
+紧急热键已编译、注册于原生面板并有冲突提示，停止入口本身有真实取消验证；本轮未发送全局 Control-Option-Command-F12 组合键验证物理键盘/Fn 差异。任务隔离是随机能力令牌所有权，不是新建的认证客户端身份系统。授权仅在本任务内，不含永久白名单或跨进程持久化停止锁。
+
+前台模式仍可能读取和影响整个桌面，批准卡片已明确提示；后台窗口指针仍依赖已有非公开 `CGEventSetWindowLocation`。未穷尽其他 macOS、Intel、多显示器、第三方应用、IME 和系统弹窗组合。工具后果性操作仍由调用方遵守用户授权；共享 OS 用户的任意命令执行不属于该控制协议的隔离保证。
+
+---
+
+## 历史轮次（不代表本轮重复执行或当前缺陷状态）
+
 ## 最新：实时控制窗与停止会话（2026-09-21）
 
 基线 `335cc3c`；分支 `feat/native-macos-computer-use`。设计与本机协议详见 [computer-use-monitor.md](computer-use-monitor.md)。本轮没有更新或重启正在提供连接的宿主。

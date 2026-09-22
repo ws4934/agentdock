@@ -25,6 +25,10 @@ final class MonitorFixtureDelegate: NSObject, NSApplicationDelegate {
             lastCommand = command
             switch command.split(separator: ":").last {
             case "pause", "resume": monitor.togglePause()
+            case "approve": monitor.approveApplication()
+            case "deny": monitor.denyApplication()
+            case "step": monitor.nextStep()
+            case "end_task": monitor.endTask()
             case "close": monitor.panel.performClose(nil)
             case "collapse": monitor.collapse()
             case "show": monitor.showPanel()
@@ -40,6 +44,8 @@ final class MonitorFixtureDelegate: NSObject, NSApplicationDelegate {
         let output: [String: Any] = [
             "pid": ProcessInfo.processInfo.processIdentifier,
             "phase": monitor.state?.phase ?? "unknown", "session_id": monitor.state?.session_id ?? "",
+            "approval_id": monitor.state?.pending_application?.id ?? "",
+            "can_resume": monitor.state?.can_resume ?? false,
             "connected": monitor.connected, "visible": monitor.panel.isVisible,
             "key_window": monitor.panel.isKeyWindow, "main_window": monitor.panel.isMainWindow,
             "active_app": NSApp.isActive, "frames": monitor.preview.frameCount,

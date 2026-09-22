@@ -429,3 +429,49 @@
 "Resume" = "恢复";
 
 "Waiting for permission" = "等待用户授权";
+
+"Input cleanup failed · manual check required" = "输入清理失败 · 需要人工检查";
+
+"Confirm manual cleanup" = "确认人工清理";
+
+"Check that all mouse buttons and keys are released. This acknowledges manual cleanup; it does not resume the task." = "请确认所有鼠标按键和键盘按键均已释放。这只确认人工清理，不会恢复任务。";
+
+"I checked the input state" = "我已检查输入状态";
+
+"Retry preview" = "重新尝试预览";
+
+"Allow for this task" = "允许本次任务";
+
+"Deny" = "拒绝";
+
+"Next step" = "执行下一步";
+
+"Application access requires your approval" = "应用访问需要你批准";
+
+"Foreground control can affect the desktop." = "前台控制可能影响整个桌面。";
+
+"Waiting for application approval" = "等待应用授权";
+
+"Waiting for a verified condition" = "等待可验证条件";
+
+"End and release desktop task" = "结束并释放桌面任务";
+
+"Emergency stop: Control-Option-Command-F12" = "紧急停止：Control-Option-Command-F12";
+
+"Emergency shortcut registered" = "紧急停止快捷键已注册";
+
+"Shortcut unavailable; use Stop and close" = "快捷键不可用，请使用停止并关闭";
+
+"Input dispatched" = "已发送输入";
+
+"Condition verified" = "条件已验证";
+
+"Condition timed out" = "等待条件超时";
+
+"Input cleanup failed" = "输入清理失败";
+
+"Cancelled" = "已取消";
+
+"Failed or partially executed" = "失败或部分执行";
+
+"Finished · result not verified" = "已结束 · 结果未验证";

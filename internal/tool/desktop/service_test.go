@@ -26,7 +26,7 @@ type fakeBackend struct {
 }
 
 func fixtureBackend() *fakeBackend {
-	return &fakeBackend{supported: true, permissions: Permissions{ScreenRecording: true, Accessibility: true}, state: State{FrontmostPID: 10, Displays: []Display{{ID: 1, Main: true, Bounds: Rect{Width: 1440, Height: 900}, PixelWidth: 2880, PixelHeight: 1800}, {ID: 2, Bounds: Rect{X: -1920, Y: -200, Width: 1920, Height: 1080}, PixelWidth: 1920, PixelHeight: 1080}}, Windows: []Window{{ID: 7, PID: 10, Bounds: Rect{Width: 1000, Height: 800}}}, Applications: []Application{{PID: 10}, {PID: 20}}}, tree: Tree{Elements: []Element{{Role: "AXButton", Title: "Save", Enabled: true, Pressable: true, Path: []int{0, 1}}}}}
+	return &fakeBackend{supported: true, permissions: Permissions{ScreenRecording: true, Accessibility: true}, state: State{FrontmostPID: 10, Displays: []Display{{ID: 1, Main: true, Bounds: Rect{Width: 1440, Height: 900}, PixelWidth: 2880, PixelHeight: 1800}, {ID: 2, Bounds: Rect{X: -1920, Y: -200, Width: 1920, Height: 1080}, PixelWidth: 1920, PixelHeight: 1080}}, Windows: []Window{{ID: 7, PID: 10, Bounds: Rect{Width: 1000, Height: 800}}}, Applications: []Application{{PID: 10}, {PID: 20}}}, tree: Tree{Elements: []Element{{Role: "AXButton", Title: "Save", EnabledKnown: true, Enabled: true, Pressable: true, Path: []int{0, 1}}}}}
 }
 func (b *fakeBackend) Supported() bool          { return b.supported }
 func (b *fakeBackend) Permissions() Permissions { return b.permissions }

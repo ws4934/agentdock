@@ -18,16 +18,18 @@ import (
 )
 
 type monitorFixtureState struct {
-	PID       int    `json:"pid"`
-	Phase     string `json:"phase"`
-	ID        string `json:"session_id"`
-	Connected bool   `json:"connected"`
-	Visible   bool   `json:"visible"`
-	Key       bool   `json:"key_window"`
-	Main      bool   `json:"main_window"`
-	Active    bool   `json:"active_app"`
-	Frames    int    `json:"frames"`
-	WindowID  uint32 `json:"window_id"`
+	CanResume  bool   `json:"can_resume"`
+	ApprovalID string `json:"approval_id"`
+	PID        int    `json:"pid"`
+	Phase      string `json:"phase"`
+	ID         string `json:"session_id"`
+	Connected  bool   `json:"connected"`
+	Visible    bool   `json:"visible"`
+	Key        bool   `json:"key_window"`
+	Main       bool   `json:"main_window"`
+	Active     bool   `json:"active_app"`
+	Frames     int    `json:"frames"`
+	WindowID   uint32 `json:"window_id"`
 }
 
 // 实际 Swift NSPanel、ScreenCaptureKit 视频、Unix socket 和 Go 输入取消链路。
@@ -65,7 +67,7 @@ func TestNativeComputerUseMonitor(t *testing.T) {
 		arch = "x86_64"
 	}
 	args := []string{"-swift-version", "5", "-parse-as-library", "-target", arch + "-apple-macosx13.0"}
-	for _, name := range []string{"Localization.swift", "ComputerUseTransport.swift", "ComputerUsePreview.swift", "ComputerUseMonitor.swift"} {
+	for _, name := range []string{"Localization.swift", "ComputerUseTransport.swift", "ComputerUseEmergencyHotkey.swift", "ComputerUsePreview.swift", "ComputerUseMonitor.swift"} {
 		args = append(args, filepath.Join(swiftRoot, "Sources", name))
 	}
 	args = append(args, filepath.Join(swiftRoot, "Tests/ComputerUseMonitorFixture.swift"), "-o", monitor)
@@ -135,6 +137,7 @@ func TestNativeComputerUseMonitor(t *testing.T) {
 	s := New(true, b)
 	defer s.Close()
 	s.RequireMonitor()
+	s.RequireTaskScope()
 	serverCtx, cancelServer := context.WithCancel(t.Context())
 	defer cancelServer()
 	serverDone := make(chan error, 1)
@@ -153,6 +156,7 @@ func TestNativeComputerUseMonitor(t *testing.T) {
 	process := start(monitor, []string{root, report, commands}, nil)
 	var panel monitorFixtureState
 	wait("monitor lease", func() bool { return read(report, &panel) && panel.Connected })
+	token := beginDesktopTask(t, s)
 	sequence := 0
 	command := func(action string) {
 		t.Helper()
@@ -190,11 +194,25 @@ func TestNativeComputerUseMonitor(t *testing.T) {
 	no := false
 	snapshot := func() string {
 		t.Helper()
-		result, e := s.Snapshot(t.Context(), SnapshotRequest{WindowID: target.WindowID, PID: target.PID, Accessibility: true, Screenshot: &no})
+		result, e := s.Snapshot(t.Context(), SnapshotRequest{TaskID: token, WindowID: target.WindowID, PID: target.PID, Accessibility: true, Screenshot: &no})
 		if e != nil {
 			t.Fatal(e)
 		}
 		return result["snapshot_id"].(string)
+	}
+	// 首次捕获必须先由真实本地面板确认应用范围。
+	firstDone := make(chan error, 1)
+	go func() {
+		_, e := s.Snapshot(t.Context(), SnapshotRequest{TaskID: token, WindowID: target.WindowID, PID: target.PID, Screenshot: &no})
+		firstDone <- e
+	}()
+	wait("local application approval", func() bool {
+		approval := s.control.status().PendingApplication
+		return approval != nil && read(report, &panel) && panel.Visible && panel.ApprovalID == approval.ID
+	})
+	command("approve")
+	if e := <-firstDone; e != nil {
+		t.Fatal(e)
 	}
 	id := snapshot()
 	wait("live nonactivating panel frames", func() bool { return read(report, &panel) && panel.Visible && panel.Frames >= 3 })
@@ -225,21 +243,45 @@ func TestNativeComputerUseMonitor(t *testing.T) {
 	command("show")
 	wait("restored preview", func() bool { return read(report, &panel) && panel.Visible })
 	command("pause")
-	wait("paused", func() bool { return s.control.status().Phase == "paused" })
-	_, err = s.Act(t.Context(), ActionRequest{Action: "click", ElementID: "e1", SnapshotID: id})
+	wait("paused", func() bool {
+		return s.control.status().Phase == "paused" && read(report, &panel) && panel.Phase == "paused" && panel.CanResume
+	})
+	_, err = s.Act(t.Context(), ActionRequest{TaskID: token, Action: "click", ElementID: "e1", SnapshotID: id})
 	requireCode(t, err, "DESKTOP_CONTROL_BLOCKED")
 	command("resume")
 	wait("local resume", func() bool { return s.control.status().Phase == "idle" })
-	_, err = s.Act(t.Context(), ActionRequest{Action: "click", ElementID: "e1", SnapshotID: id})
+	_, err = s.Act(t.Context(), ActionRequest{TaskID: token, Action: "click", ElementID: "e1", SnapshotID: id})
 	requireCode(t, err, "STALE_SNAPSHOT")
 	t.Log("verified collapse retains local stop control; pause/resume rejects old snapshot")
+	result, e := s.Wait(t.Context(), WaitRequest{TaskID: token, PID: target.PID, WindowID: target.WindowID, Condition: "element_enabled", Element: &ElementSelector{Role: "AXButton", Title: textPointer("Test Click")}, TimeoutMS: msPointer(1000)})
+	if e != nil || result["met"] != true {
+		t.Fatalf("native wait condition: %v %v", result, e)
+	}
+	command("pause")
+	wait("pause before single step", func() bool {
+		return s.control.status().Phase == "paused" && read(report, &panel) && panel.Phase == "paused" && panel.CanResume
+	})
+	command("step")
+	wait("one step authorized", func() bool { return s.control.status().Phase == "idle" })
+	stepID := snapshot()
+	_, e = s.Act(t.Context(), ActionRequest{TaskID: token, Action: "click", Point: &target.Button, SnapshotID: stepID})
+	if e != nil {
+		t.Fatal(e)
+	}
+	wait("step consumed", func() bool {
+		return s.control.status().Phase == "paused" && s.control.status().Reason == "single_step_completed" && read(report, &panel) && panel.Phase == "paused" && panel.CanResume
+	})
+	command("resume")
+	wait("resume after step", func() bool { return s.control.status().Phase == "idle" })
+	t.Log("verified real local app grant, native AX wait and one-mutation single-step with fresh snapshot")
+
 	id = snapshot()
 	read(targetFile, &target)
 	downBefore := target.Downs
 	releaseBefore := target.Releases
 	done := make(chan error, 1)
 	go func() {
-		_, e := s.Act(t.Context(), ActionRequest{Action: "drag", SnapshotID: id, Path: []Point{{target.Canvas.X - 60, target.Canvas.Y}, {target.Canvas.X + 60, target.Canvas.Y}}, DurationMS: 2000})
+		_, e := s.Act(t.Context(), ActionRequest{TaskID: token, Action: "drag", SnapshotID: id, Path: []Point{{target.Canvas.X - 60, target.Canvas.Y}, {target.Canvas.X + 60, target.Canvas.Y}}, DurationMS: 2000})
 		done <- e
 	}()
 	wait("drag started", func() bool { var value fixtureState; return read(targetFile, &value) && value.Downs > downBefore })
@@ -250,7 +292,7 @@ func TestNativeComputerUseMonitor(t *testing.T) {
 	}
 	wait("released original mouse button", func() bool { var value fixtureState; return read(targetFile, &value) && value.Releases > releaseBefore })
 	wait("panel closed after stop", func() bool { return read(report, &panel) && !panel.Visible && panel.Phase == "stopped" })
-	_, err = s.Snapshot(t.Context(), SnapshotRequest{WindowID: target.WindowID})
+	_, err = s.Snapshot(t.Context(), SnapshotRequest{TaskID: token, WindowID: target.WindowID})
 	requireCode(t, err, "DESKTOP_CONTROL_BLOCKED")
 	isolated()
 	t.Log("verified close button cancels active drag, releases original target, then acknowledges stopped and closes panel")
@@ -263,7 +305,7 @@ func TestNativeComputerUseMonitor(t *testing.T) {
 	wait("monitor disconnect pause", func() bool {
 		return s.control.status().Phase == "paused" && s.control.status().Reason == "monitor_disconnected"
 	})
-	_, err = s.Snapshot(t.Context(), SnapshotRequest{WindowID: target.WindowID})
+	_, err = s.Snapshot(t.Context(), SnapshotRequest{TaskID: token, WindowID: target.WindowID})
 	requireCode(t, err, "DESKTOP_CONTROL_BLOCKED")
 	t.Logf("verified monitor-process loss pauses core; %d hardware mouse movements distinguished from automation", lastMouse.ExternalMoves-sentinel.MouseObserver.ExternalMoves)
 	cancelServer()

@@ -20,7 +20,7 @@ func (b *backgroundContractBackend) CaptureWindow(ctx context.Context, w desktop
 	return b.Capture(ctx, desktop.Display{}, n)
 }
 func (*backgroundContractBackend) WindowTree(context.Context, desktop.Window, int, int) (desktop.Tree, error) {
-	return desktop.Tree{Elements: []desktop.Element{{Role: "AXButton", Enabled: true, Pressable: true, Path: []int{0}}, {Role: "AXTextField", Enabled: true, ValueSettable: true, Path: []int{1}}}}, nil
+	return desktop.Tree{Elements: []desktop.Element{{Role: "AXButton", EnabledKnown: true, Enabled: true, Pressable: true, Path: []int{0}}, {Role: "AXTextField", EnabledKnown: true, Enabled: true, ValueSettable: true, Path: []int{1}}}}, nil
 }
 func (b *backgroundContractBackend) WindowInput(_ context.Context, _ desktop.Window, in desktop.WindowInput) error {
 	b.inputs = append(b.inputs, in)

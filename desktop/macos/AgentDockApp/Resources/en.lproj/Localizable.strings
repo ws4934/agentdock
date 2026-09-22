@@ -429,3 +429,49 @@
 "Resume" = "Resume";
 
 "Waiting for permission" = "Waiting for permission";
+
+"Input cleanup failed · manual check required" = "Input cleanup failed · manual check required";
+
+"Confirm manual cleanup" = "Confirm manual cleanup";
+
+"Check that all mouse buttons and keys are released. This acknowledges manual cleanup; it does not resume the task." = "Check that all mouse buttons and keys are released. This acknowledges manual cleanup; it does not resume the task.";
+
+"I checked the input state" = "I checked the input state";
+
+"Retry preview" = "Retry preview";
+
+"Allow for this task" = "Allow for this task";
+
+"Deny" = "Deny";
+
+"Next step" = "Next step";
+
+"Application access requires your approval" = "Application access requires your approval";
+
+"Foreground control can affect the desktop." = "Foreground control can affect the desktop.";
+
+"Waiting for application approval" = "Waiting for application approval";
+
+"Waiting for a verified condition" = "Waiting for a verified condition";
+
+"End and release desktop task" = "End and release desktop task";
+
+"Emergency stop: Control-Option-Command-F12" = "Emergency stop: Control-Option-Command-F12";
+
+"Emergency shortcut registered" = "Emergency shortcut registered";
+
+"Shortcut unavailable; use Stop and close" = "Shortcut unavailable; use Stop and close";
+
+"Input dispatched" = "Input dispatched";
+
+"Condition verified" = "Condition verified";
+
+"Condition timed out" = "Condition timed out";
+
+"Input cleanup failed" = "Input cleanup failed";
+
+"Cancelled" = "Cancelled";
+
+"Failed or partially executed" = "Failed or partially executed";
+
+"Finished · result not verified" = "Finished · result not verified";
