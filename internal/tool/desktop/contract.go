@@ -18,6 +18,8 @@ func InputSchema(name string) (map[string]any, bool) {
 		props["task_id"] = map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Private capability returned by desktop_task begin; required by the production host. Never copy another task's ID."}
 	}
 	switch name {
+	case ToolSequence:
+		return sequenceInputSchema(props), true
 	case ToolWait:
 		return waitInputSchema(props), true
 	case ToolTask:
@@ -93,6 +95,8 @@ func when(action string, then map[string]any) map[string]any {
 }
 func OutputSchema(name string) (map[string]any, bool) {
 	switch name {
+	case ToolSequence:
+		return sequenceOutputSchema(), true
 	case ToolTask:
 		return contract.OutputObject(map[string]any{"action": contract.String("Task action."), "task_id": contract.String("Private task capability, returned only on begin."), "task_reference": contract.String("Public reference for the local UI."), "ended": contract.Boolean("Whether the task was released."), "control_session": contract.OpenObject("Current control status.")}, "action"), true
 	case ToolWait:

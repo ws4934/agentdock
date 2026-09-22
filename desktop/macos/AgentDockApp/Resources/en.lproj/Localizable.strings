@@ -503,3 +503,6 @@
 "Checking…" = "Checking…";
 "Core unavailable" = "Core unavailable";
 "Permission not active · see recovery" = "Permission not active · see recovery";
+"Sequence" = "Sequence";
+"Sequence complete" = "Sequence complete";
+"Sequence interrupted" = "Sequence interrupted";

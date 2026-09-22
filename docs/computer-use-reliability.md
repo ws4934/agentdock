@@ -8,7 +8,7 @@
 
 ## 正式宿主调用协议
 
-正式 Core 启用桌面能力后，同时要求本机监视器在线和独占任务。七个工具为 `desktop_status`、`desktop_task`、`desktop_permissions`、`desktop_launch`、`desktop_snapshot`、`desktop_act`、`desktop_wait`。状态查询和不带目标的窗口元数据发现不需要任务许可，但不能生成可输入的快照或干扰正在使用的快照。
+正式 Core 启用桌面能力后，同时要求本机监视器在线和独占任务。工具包括 `desktop_status`、`desktop_task`、`desktop_permissions`、`desktop_launch`、`desktop_snapshot`、`desktop_act`、`desktop_wait` 和有界连续步骤 `desktop_sequence`。状态查询和不带目标的窗口元数据发现不需要任务许可，但不能生成可输入的快照或干扰正在使用的快照。连续步骤的逐步观察、中断与单步语义见 [computer-use-sequence.md](computer-use-sequence.md)。
 
 ```json
 {"action":"begin","title":"在指定应用完成本次界面操作"}

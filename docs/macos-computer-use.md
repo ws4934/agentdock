@@ -1,6 +1,6 @@
 # 原生 macOS Computer Use
 
-单次动作可通过 `observe_after:true` 同时返回后台窗口的新观察，详见[动作后观察与精简界面](computer-use-observation.md)。它不增加批量输入，也不改变本机授权、停止或 AX 数据边界。
+单次动作可通过 `observe_after:true` 返回新观察；可预先确定的连续步骤使用 [desktop_sequence](computer-use-sequence.md)，在本机逐步观察和执行，减少模型往返。本机授权、单步、停止和 AX 数据边界保留。
 
 AgentDock 内置的 macOS 桌面能力供连接的 AI 客户端使用：**观察桌面 → 客户端理解和决策 → 执行一个动作 → 再观察验证**。这是独立实现的 Computer Use 工具层，不调用 Codex 插件，也不内置模型或自主规划器。
 
@@ -33,7 +33,7 @@ AGENTDOCK_DESKTOP_ENABLED=true ./bin/agentdock --stdio
 
 不要直接替换正在为当前会话提供连接的二进制。安装或重启新版本后，客户端可能需要刷新连接或工具列表。
 
-默认关闭桌面能力；未启用时，仅 `desktop_status` 可用。其他六个工具不会被公开。开启此能力意味着已认证的 MCP 客户端可以申请观察和控制桌面；请保持原有认证、主机权限和网络访问限制。
+默认关闭桌面能力；未启用时，仅 `desktop_status` 可用。其他桌面工具不会被公开。开启此能力意味着已认证的 MCP 客户端可以申请观察和控制桌面；请保持原有认证、主机权限和网络访问限制。
 
 ## 系统权限
 
@@ -51,6 +51,7 @@ AGENTDOCK_DESKTOP_ENABLED=true ./bin/agentdock --stdio
 | --- | --- | --- |
 | `desktop_task` | 声明、检查和结束当前 Core 的独占任务，返回私有 task_id | 任务控制状态 |
 | `desktop_wait` | 等待窗口或 AX 条件，不发送输入、不生成动作快照 | 否 |
+| `desktop_sequence` | 在一个后台窗口内执行有界 AX 步骤，每步重新观察，支持后置条件等待 | 是 |
 | `desktop_status` | 查询支持状态、启用开关、屏幕录制/辅助功能/Secure Input 状态 | 否，不触发授权 |
 | `desktop_permissions` | 经用户同意请求指定系统权限 | 可能显示系统弹窗 |
 | `desktop_launch` | 按应用名、Bundle ID 或绝对 .app 路径启动/复用应用，默认后台；有界等待窗口 | 是，应用/系统可能显示界面 |

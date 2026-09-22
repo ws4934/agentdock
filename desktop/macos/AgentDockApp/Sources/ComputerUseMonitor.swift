@@ -172,6 +172,9 @@ final class ComputerUseMonitor: NSObject, NSWindowDelegate, NSMenuDelegate {
         default: phase = L10n.text("Ready for a new task")
         }
         stateLabel.stringValue = phase + (next.mode == "foreground" ? " · " + L10n.text("Foreground control") : " · " + L10n.text("Background window"))
+        if let step = next.sequence_step, let total = next.sequence_total, total > 0 {
+            stateLabel.stringValue += " · \(step)/\(total)"
+        }
         pauseButton.title = next.cleanup_failed == true ? L10n.text("Confirm manual cleanup") : (next.can_resume ? L10n.text("Resume") : L10n.text("Pause"))
         pauseButton.toolTip = L10n.text("Resume with fresh observation")
         pauseButton.isEnabled = stopIntentID == nil && (next.can_resume || next.phase == "running" || next.phase == "cleanup_failed" && next.active_operations == 0)
@@ -193,6 +196,8 @@ final class ComputerUseMonitor: NSObject, NSWindowDelegate, NSMenuDelegate {
     }
     private func outcomeLabel(_ value: String) -> String {
         switch value {
+        case "sequence_completed": return L10n.text("Sequence complete")
+        case "sequence_interrupted": return L10n.text("Sequence interrupted")
         case "dispatched": return L10n.text("Input dispatched")
         case "wait_met": return L10n.text("Condition verified")
         case "wait_timeout": return L10n.text("Condition timed out")
@@ -204,6 +209,7 @@ final class ComputerUseMonitor: NSObject, NSWindowDelegate, NSMenuDelegate {
     }
     private func activityLabel(_ value: String) -> String {
         switch value {
+        case "sequence": return L10n.text("Sequence")
         case "launch": return L10n.text("Opening application")
         case "permissions": return L10n.text("Waiting for permission")
         case "wait": return L10n.text("Waiting for a verified condition")

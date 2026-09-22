@@ -1,5 +1,7 @@
 # Computer Use：单次输入后的观察
 
+需要减少连续步骤之间的模型往返时，使用独立的 [desktop_sequence](computer-use-sequence.md)。本页的 observe_after 仍只执行一次输入。
+
 `desktop_act` 支持可选的 `observe_after: true`。它仍只执行一个动作；输入成功后，在同一任务、控制代次和串行锁内，对刚才的后台窗口获取一次新快照。客户端读取这次结果后再决定下一步，不提交动作数组，也不在工具内部循环点击。
 
 ```json

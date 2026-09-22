@@ -503,3 +503,6 @@
 "Checking…" = "正在检查…";
 "Core unavailable" = "Core 不可用";
 "Permission not active · see recovery" = "权限未生效 · 查看权限恢复";
+"Sequence" = "连续操作";
+"Sequence complete" = "步骤执行完毕";
+"Sequence interrupted" = "步骤已中断";
