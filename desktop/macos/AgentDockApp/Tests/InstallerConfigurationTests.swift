@@ -130,6 +130,8 @@ struct InstallerConfigurationTests {
             _ = try ACPDesktopConfiguration.decodeArguments("--flag value")
         }
         try testACPAdapterResolution()
+        try testACPUserPathContract()
+        try testACPUserToolchainResolution()
 
         expectFailure(L10n.format(
             "Contains configuration keys that the GUI is not allowed to modify: %@",
@@ -381,6 +383,64 @@ struct InstallerConfigurationTests {
         precondition(configured.command == node.path)
         precondition(configured.arguments == [entry.path])
 
+    }
+
+    private static func testACPUserPathContract() throws {
+        struct PathCase: Decodable {
+            let name: String
+            let home: String
+            let environment: [String: String]
+            let expected: [String]
+        }
+        var repository = URL(fileURLWithPath: #filePath)
+        for _ in 0..<5 { repository.deleteLastPathComponent() }
+        let fixture = repository.appendingPathComponent("internal/envstore/testdata/macos-user-path.json")
+        let cases = try JSONDecoder().decode([PathCase].self, from: Data(contentsOf: fixture))
+        for item in cases {
+            let directories = ACPAgentPreset.searchDirectories(
+                home: URL(fileURLWithPath: item.home, isDirectory: true), environment: item.environment
+            ).map(\.path)
+            precondition(directories == item.expected, "Go/Swift PATH contract mismatch: \(item.name)")
+        }
+    }
+
+    private static func testACPUserToolchainResolution() throws {
+        let fm = FileManager.default
+        // 每个用例在独立 HOME 下创建入口，不依赖开发机已有的 npm/Volta 安装。
+        for customVolta in [false, true] {
+            let root = fm.temporaryDirectory.appendingPathComponent("AgentDockVolta-\(UUID().uuidString)", isDirectory: true)
+            defer { try? fm.removeItem(at: root) }
+            let voltaHome = root.appendingPathComponent(customVolta ? "Custom Volta" : ".volta", isDirectory: true)
+            let shim = voltaHome.appendingPathComponent("bin/claude-agent-acp")
+            try fm.createDirectory(at: shim.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try fm.createSymbolicLink(at: shim, withDestinationURL: URL(fileURLWithPath: "/usr/bin/true"))
+            let environment = customVolta ? ["VOLTA_HOME": voltaHome.path] : [:]
+            let resolution = ACPAgentPreset.claude.resolveAdapter(home: root, environment: environment)
+            precondition(resolution.available)
+            precondition(resolution.command == shim.path) // 不保存 volta-shim 的真实 target。
+            precondition(resolution.arguments.isEmpty)
+            let configured = ACPAgentPreset.custom.resolveAdapter(
+                configuredCommand: shim.path, configuredArguments: [], home: root, environment: environment
+            )
+            precondition(configured.available && configured.command == shim.path)
+            try fm.removeItem(at: shim)
+            try fm.createSymbolicLink(at: shim, withDestinationURL: root.appendingPathComponent("missing-shim"))
+            precondition(!ACPAgentPreset.custom.resolveAdapter(configuredCommand: shim.path, home: root, environment: environment).available)
+        }
+        for directory in ["Library/pnpm", ".local/share/pnpm", ".bun/bin"] {
+            let root = fm.temporaryDirectory.appendingPathComponent("AgentDockNode-\(UUID().uuidString)", isDirectory: true)
+            defer { try? fm.removeItem(at: root) }
+            let node = root.appendingPathComponent(".local/bin/node")
+            let adapter = root.appendingPathComponent(directory).appendingPathComponent("claude-agent-acp")
+            try fm.createDirectory(at: node.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try fm.createDirectory(at: adapter.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try fm.createSymbolicLink(at: node, withDestinationURL: URL(fileURLWithPath: "/usr/bin/true"))
+            try Data("#!/usr/bin/env node\n".utf8).write(to: adapter)
+            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: adapter.path)
+            let resolution = ACPAgentPreset.claude.resolveAdapter(home: root, environment: [:])
+            precondition(resolution.available && resolution.command == node.path)
+            precondition(resolution.arguments == [adapter.path])
+        }
     }
 
     private static func testTunnelTokenStore() throws {

@@ -74,7 +74,7 @@ enum ACPAgentPreset: String, CaseIterable, Codable {
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> ACPAdapterResolution {
-        let directories = searchDirectories(home: home, environment: environment)
+        let directories = Self.searchDirectories(home: home, environment: environment)
         let configured = resolveConfiguredAdapter(
             command: configuredCommand,
             arguments: configuredArguments,
@@ -226,18 +226,28 @@ enum ACPAgentPreset: String, CaseIterable, Codable {
         return shebang.hasPrefix("#!") && shebang.contains("node")
     }
 
-    private func searchDirectories(home: URL, environment: [String: String]) -> [URL] {
-        var directories = [
-            home.appendingPathComponent(".local/bin", isDirectory: true),
-            URL(fileURLWithPath: "/opt/homebrew/bin", isDirectory: true),
-            URL(fileURLWithPath: "/usr/local/bin", isDirectory: true),
-            URL(fileURLWithPath: "/usr/bin", isDirectory: true),
-        ]
+    // 与 envstore.userExecutableDirectories 保持一致，不启动登录 shell 或扫描任意版本目录。
+    static func searchDirectories(home: URL, environment: [String: String]) -> [URL] {
+        var paths = [home.appendingPathComponent(".local/bin", isDirectory: true).path]
         if let path = environment["PATH"] {
-            directories += path.split(separator: ":", omittingEmptySubsequences: true)
-                .map { URL(fileURLWithPath: String($0), isDirectory: true) }
+            paths += path.split(separator: ":", omittingEmptySubsequences: true).map(String.init)
         }
-        return uniqueURLs(directories)
+        func appendToolHome(_ key: String, suffix: String, defaults: [String]) {
+            if let root = environment[key], root.hasPrefix("/") {
+                paths.append(URL(fileURLWithPath: root, isDirectory: true).appendingPathComponent(suffix).path)
+            } else {
+                paths += defaults.map { home.appendingPathComponent($0, isDirectory: true).path }
+            }
+        }
+        appendToolHome("VOLTA_HOME", suffix: "bin", defaults: [".volta/bin"])
+        appendToolHome("PNPM_HOME", suffix: "", defaults: ["Library/pnpm", ".local/share/pnpm"])
+        appendToolHome("BUN_INSTALL", suffix: "bin", defaults: [".bun/bin"])
+        paths += ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+        var seen = Set<String>()
+        return paths.filter { $0.hasPrefix("/") }.compactMap { path in
+            let url = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+            return seen.insert(url.path).inserted ? url : nil
+        }
     }
 
     private func resolveNodeExecutable(directories: [URL]) -> URL? {

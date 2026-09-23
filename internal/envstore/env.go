@@ -32,6 +32,7 @@ func MinimalSystemEnv() map[string]string {
 		env["TMPDIR"] = os.TempDir()
 	}
 	completePlatformEnv(env)
+	CompleteUserEnvironment(env)
 	return env
 }
 

@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Finder/launchd system PATH",
+    "home": "/Users/example",
+    "environment": {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin"},
+    "expected": ["/Users/example/.local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin", "/Users/example/.volta/bin", "/Users/example/Library/pnpm", "/Users/example/.local/share/pnpm", "/Users/example/.bun/bin", "/opt/homebrew/bin", "/usr/local/bin"]
+  },
+  {
+    "name": "custom roots, spaces, duplicates and relative entries",
+    "home": "/Users/Test Person",
+    "environment": {"PATH": ":/custom/node/bin:relative:.:/usr/bin:/custom/node/bin/:/usr/bin/.", "VOLTA_HOME": "/opt/Volta Data", "PNPM_HOME": "/opt/pnpm", "BUN_INSTALL": "/opt/bun"},
+    "expected": ["/Users/Test Person/.local/bin", "/custom/node/bin", "/usr/bin", "/opt/Volta Data/bin", "/opt/pnpm", "/opt/bun/bin", "/opt/homebrew/bin", "/usr/local/bin", "/bin", "/usr/sbin", "/sbin"]
+  },
+  {
+    "name": "active runtime precedes fallback tools",
+    "home": "/Users/example",
+    "environment": {"PATH": "/Users/example/.nvm/versions/node/v22/bin:/usr/bin"},
+    "expected": ["/Users/example/.local/bin", "/Users/example/.nvm/versions/node/v22/bin", "/usr/bin", "/Users/example/.volta/bin", "/Users/example/Library/pnpm", "/Users/example/.local/share/pnpm", "/Users/example/.bun/bin", "/opt/homebrew/bin", "/usr/local/bin", "/bin", "/usr/sbin", "/sbin"]
+  },
+  {
+    "name": "empty PATH and invalid tool roots",
+    "home": "/Users/example",
+    "environment": {"PATH": "", "VOLTA_HOME": "relative", "PNPM_HOME": "~/pnpm", "BUN_INSTALL": ""},
+    "expected": ["/Users/example/.local/bin", "/Users/example/.volta/bin", "/Users/example/Library/pnpm", "/Users/example/.local/share/pnpm", "/Users/example/.bun/bin", "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+  }
+]

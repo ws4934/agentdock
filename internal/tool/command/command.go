@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/uvwt/agentdock/internal/envstore"
 	"github.com/uvwt/agentdock/internal/tool/command/session"
 )
 
@@ -477,16 +478,12 @@ func (svc *Service) baseCommandEnv() (map[string]string, error) {
 	repairPlatformCommandEnv(env)
 	env["AGENTDOCK_HOME"] = svc.config().AgentDockHome
 	env["AGENTDOCK_DEFAULT_DIR"] = svc.config().AgentDockDefaultDir
-	hostHome := ""
 	if resolvedHome, err := os.UserHomeDir(); err == nil && resolvedHome != "" {
-		hostHome = resolvedHome
 		env["HOME"] = resolvedHome
 	}
-	// macOS 的 launchd 默认只提供系统 PATH。命令工具需要补齐常见用户级可执行目录，
-	// 否则 Homebrew、~/.local/bin 中已安装的 CLI 在桌面服务里会表现为“未安装”。
-	if commandPath := platformCommandPath(env["PATH"], hostHome); commandPath != "" {
-		env["PATH"] = commandPath
-	}
+	// 与 ACP/MCP 共用用户身份和工具链基线，避免白名单丢失 USER/LOGNAME 后
+	// 已登录的 CLI 找不到自己的凭据。宿主映射、Skill 和请求覆盖仍保持更高优先级。
+	envstore.CompleteUserEnvironment(env)
 	commandTempDir := filepath.Join(svc.config().AgentDockHome, "tmp")
 	env["TMPDIR"] = commandTempDir
 	configurePlatformCommandTempEnv(env, commandTempDir)
