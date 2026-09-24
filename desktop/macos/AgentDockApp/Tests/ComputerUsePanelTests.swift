@@ -10,13 +10,14 @@ struct ComputerUsePanelTests {
         defer { preferences.removePersistentDomain(forName: suite) }
         let monitor = ComputerUseMonitor(runtimeRoot: URL(fileURLWithPath: "/tmp/agentdock-ui-test-no-server"), preferences: preferences)
         defer { monitor.shutdown() }
-        func state(_ phase: String = "running", approval: Bool = false, session: String = "fixture-session", longTitle: Bool = false) throws -> ComputerUseState {
+        func state(_ phase: String = "running", approval: Bool = false, session: String = "fixture-session", longTitle: Bool = false, task: String = "", operations: Int = 1, enabled: Bool = true, cleanup: Bool = false) throws -> ComputerUseState {
             var value: [String: Any] = [
-                "enabled": true, "monitor_required": true, "monitor_connected": true,
+                "enabled": enabled, "monitor_required": true, "monitor_connected": true,
                 "session_id": session, "epoch": 1, "phase": phase, "activity": "sequence", "mode": "background",
                 "application": ["pid": 0, "name": longTitle ? String(repeating: "Long application name ", count: 8) : "Calculator", "bundle_id": "test.synthetic", "app_path": "/System/Applications/Calculator.app"],
                 "window": ["id": 0, "pid": 0, "title": "Synthetic preview", "bounds": ["x": 0, "y": 0, "width": 600, "height": 400]],
-                "pointer_sequence": 0, "active_operations": 1, "reason": "", "can_resume": phase == "paused",
+                "pointer_sequence": 0, "active_operations": operations, "reason": "", "can_resume": phase == "paused",
+                "task_reference": task, "cleanup_failed": cleanup,
                 "task_label": longTitle ? String(repeating: "Task title ", count: 15) : "Check the calculation", "sequence_step": 3, "sequence_total": 5,
                 "trust_available": true,
                 "trusted_applications": [["id": "fixture-trust", "application": ["pid": 0, "name": "Calculator", "bundle_id": "test.synthetic", "app_path": "/System/Applications/Calculator.app"], "mode": "background"]]
@@ -45,6 +46,28 @@ struct ComputerUsePanelTests {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try bitmap.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent(name))
         }
+        // 历史会话和信任记录不能让控制图标常驻；真实任务与安全告警不能被隐藏。
+        for phase in ["idle", "completed", "stopped", "closed"] {
+            let inactive = try state(phase, operations: 0)
+            precondition(!inactive.shouldShowStatusItem, "inactive history kept the control indicator visible")
+        }
+        for phase in ["running", "pausing", "stopping", "paused", "cleanup_failed"] {
+            let active = try state(phase, operations: 0)
+            precondition(active.shouldShowStatusItem, "active/safety state lost the control indicator")
+        }
+        let reserved = try state("idle", session: "", task: "owned-task", operations: 0)
+        precondition(reserved.shouldShowStatusItem)
+        let disabled = try state("idle", session: "", task: "owned-task", operations: 0, enabled: false)
+        precondition(!disabled.shouldShowStatusItem)
+        let cleanup = try state("closed", operations: 0, enabled: false, cleanup: true)
+        precondition(cleanup.shouldShowStatusItem)
+        let idle = try state("idle", session: "", operations: 0)
+        monitor.apply(idle)
+        precondition(!monitor.panel.isVisible)
+        let trusted = monitor.trustedApplicationsMenuItem()
+        precondition(trusted.isEnabled && trusted.submenu?.items.count == 1, "idle trust revocation entry disappeared")
+        precondition(trusted.submenu?.items.first?.representedObject as? String == "fixture-trust")
+
         let normal = try state()
         monitor.panel.appearance = NSAppearance(named: .aqua)
         monitor.apply(normal)

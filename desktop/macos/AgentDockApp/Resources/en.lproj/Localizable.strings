@@ -173,6 +173,9 @@
 "Not installed · %@" = "Not installed · %@";
 "Detected · %@" = "Detected · %@";
 "Public address returned HTTP %d" = "Public address returned HTTP %d";
+"Cloudflare Tunnel disconnected (HTTP 530 / 1033)" = "Cloudflare Tunnel disconnected (HTTP 530 / 1033)";
+"Cloudflare origin DNS error (HTTP 530 / 1016)" = "Cloudflare origin DNS error (HTTP 530 / 1016)";
+"Cloudflare error %d (HTTP 530)" = "Cloudflare error %d (HTTP 530)";
 "Not checked" = "Not checked";
 "Configured %@ · takes effect when enabled" = "Configured %@ · takes effect when enabled";
 "Detected %@ · takes effect when enabled" = "Detected %@ · takes effect when enabled";

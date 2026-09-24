@@ -334,14 +334,14 @@ final class ComputerUseMonitor: NSObject, NSWindowDelegate, NSMenuDelegate {
             pauseButton.isEnabled = stopIntentID == nil && (next.can_resume || next.phase == "running" || next.phase == "cleanup_failed" && next.active_operations == 0)
             stopButton.isEnabled = next.isLive && !next.isDraining
             collapseButton.isEnabled = next.isLive
-            statusItem.isVisible = next.enabled && (!next.session_id.isEmpty || !(next.task_reference ?? "").isEmpty || !(next.trusted_applications ?? []).isEmpty)
+            statusItem.isVisible = next.shouldShowStatusItem
             statusItem.button?.title = ""
             statusItem.button?.toolTip = titleLabel.stringValue + " · " + phase
             updateLayout()
         }
         if next.phase == "cleanup_failed" { closeRequested = false; collapsed = false }
         if next.isLive && !collapsed && !closeRequested && !panel.isVisible { panel.orderFrontRegardless() }
-        if next.phase == "stopped" || next.phase == "completed" || next.phase == "closed" { panel.orderOut(nil) }
+        if !next.shouldShowStatusItem || next.phase == "stopped" || next.phase == "completed" || next.phase == "closed" { panel.orderOut(nil) }
         let target = connected && previewExpanded && !collapsed && !closeRequested && next.shouldPreview ? next.window : nil
         // UI没有变化时仍可按原有有限重试策略恢复预览。
         preview.select(target)
@@ -385,14 +385,8 @@ final class ComputerUseMonitor: NSObject, NSWindowDelegate, NSMenuDelegate {
         let pause = menu.addItem(withTitle: pauseButton.title, action: #selector(togglePause), keyEquivalent: ""); pause.target = self; pause.isEnabled = pauseButton.isEnabled
         let stop = menu.addItem(withTitle: L10n.text("Stop desktop control"), action: #selector(stopAndClose), keyEquivalent: ""); stop.target = self; stop.isEnabled = state?.isLive == true
         let retry = menu.addItem(withTitle: L10n.text("Retry preview"), action: #selector(retryPreview), keyEquivalent: ""); retry.target = self
-        let trustMenu = NSMenu()
-        for entry in state?.trusted_applications ?? [] {
-            let item = trustMenu.addItem(withTitle: entry.application.name + " · " + L10n.text(entry.mode == "foreground" ? "Foreground" : "Background") + " — " + L10n.text("Revoke"), action: #selector(revokeApplication(_:)), keyEquivalent: "")
-            item.target = self; item.representedObject = entry.id; item.toolTip = entry.application.app_path
-        }
-        let trusted = menu.addItem(withTitle: L10n.text("Trusted applications"), action: nil, keyEquivalent: "")
-        trusted.submenu = trustMenu; trusted.isEnabled = !trustMenu.items.isEmpty
-        let end = menu.addItem(withTitle: L10n.text("End and release desktop task"), action: #selector(endTask), keyEquivalent: ""); end.target = self; end.isEnabled = state?.active_operations == 0 && state?.cleanup_failed != true
+        menu.addItem(trustedApplicationsMenuItem())
+        let end = menu.addItem(withTitle: L10n.text("End and release desktop task"), action: #selector(endTask), keyEquivalent: ""); end.target = self; end.isEnabled = state?.hasDesktopTask == true && state?.active_operations == 0 && state?.cleanup_failed != true
         let hotkey = menu.addItem(withTitle: L10n.text("Emergency stop: Control-Option-Command-F12"), action: nil, keyEquivalent: ""); hotkey.isEnabled = false
         hotkey.toolTip = emergencyHotkey?.available == true ? L10n.text("Emergency shortcut registered") : L10n.text("Shortcut unavailable; use Stop and close")
         if let events = state?.recent_operations, !events.isEmpty {
@@ -406,6 +400,18 @@ final class ComputerUseMonitor: NSObject, NSWindowDelegate, NSMenuDelegate {
     }
     func menuWillOpen(_ menu: NSMenu) { rebuildMenu(); menuTracking = true }
     func menuDidClose(_ menu: NSMenu) { menuTracking = false }
+    // 主 AgentDock 菜单也提供撤销入口，空闲时不必为了管理信任常驻第二个图标。
+    func trustedApplicationsMenuItem() -> NSMenuItem {
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+        for entry in state?.trusted_applications ?? [] {
+            let item = submenu.addItem(withTitle: entry.application.name + " · " + L10n.text(entry.mode == "foreground" ? "Foreground" : "Background") + " — " + L10n.text("Revoke"), action: #selector(revokeApplication(_:)), keyEquivalent: "")
+            item.target = self; item.representedObject = entry.id; item.toolTip = entry.application.app_path
+        }
+        let item = NSMenuItem(title: L10n.text("Trusted applications"), action: nil, keyEquivalent: "")
+        item.submenu = submenu; item.isEnabled = !submenu.items.isEmpty
+        return item
+    }
     private func command(_ operation: String, trustID: String = "") {
         guard let state else { return }
         if stopIntentID != nil && operation != "stop" { return }

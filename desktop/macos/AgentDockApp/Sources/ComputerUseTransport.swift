@@ -37,6 +37,11 @@ struct ComputerUseState: Decodable, Equatable {
     let sequence_total: Int?
 
     var isLive: Bool { ["running", "pausing", "stopping", "paused", "cleanup_failed"].contains(phase) }
+    var hasDesktopTask: Bool { !(task_reference ?? "").isEmpty }
+    // 历史会话和持久信任不是正在控制电脑；活动任务、暂停和清理异常仍必须可见。
+    var shouldShowStatusItem: Bool {
+        isLive || active_operations > 0 || cleanup_failed == true || pending_application != nil || (enabled && hasDesktopTask)
+    }
     var isDraining: Bool { phase == "pausing" || phase == "stopping" }
     var shouldPreview: Bool { phase == "running" && window.id > 0 }
 }

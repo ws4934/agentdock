@@ -44,7 +44,7 @@ final class PublicEndpointChecker: @unchecked Sendable {
             guard response.statusCode == 200 else {
                 return PublicEndpointCheckResult(
                     isReachable: false,
-                    message: L10n.format("Public address returned HTTP %d", response.statusCode),
+                    message: Self.httpErrorMessage(statusCode: response.statusCode, body: data),
                     latencyMilliseconds: latency
                 )
             }
@@ -67,6 +67,22 @@ final class PublicEndpointChecker: @unchecked Sendable {
                 latencyMilliseconds: nil
             )
         }
+    }
+
+    static func httpErrorMessage(statusCode: Int, body: Data) -> String {
+        // 530 只是外层状态码。只提取有明确标记的 1xxx 错误，不展示远端 HTML。
+        if statusCode == 530,
+           let text = String(data: body.prefix(64 * 1024), encoding: .utf8),
+           let regex = try? NSRegularExpression(pattern: #"(?:error(?:\s+code)?\s*[:=]?\s*|cf-error-code["']?\s*>\s*)(1\d{3})\b"#, options: .caseInsensitive),
+           let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+           let range = Range(match.range(at: 1), in: text), let code = Int(text[range]) {
+            switch code {
+            case 1033: return L10n.text("Cloudflare Tunnel disconnected (HTTP 530 / 1033)")
+            case 1016: return L10n.text("Cloudflare origin DNS error (HTTP 530 / 1016)")
+            default: return L10n.format("Cloudflare error %d (HTTP 530)", code)
+            }
+        }
+        return L10n.format("Public address returned HTTP %d", statusCode)
     }
 
     static func healthURL(from publicMCPURL: URL) -> URL? {

@@ -173,6 +173,9 @@
 "Not installed · %@" = "未安装 · %@";
 "Detected · %@" = "已检测到 · %@";
 "Public address returned HTTP %d" = "公网地址返回 HTTP %d";
+"Cloudflare Tunnel disconnected (HTTP 530 / 1033)" = "Cloudflare 隧道未连接（HTTP 530 / 1033）";
+"Cloudflare origin DNS error (HTTP 530 / 1016)" = "Cloudflare 源站 DNS 错误（HTTP 530 / 1016）";
+"Cloudflare error %d (HTTP 530)" = "Cloudflare 错误 %d（HTTP 530）";
 "Not checked" = "未检查";
 "Configured %@ · takes effect when enabled" = "已配置 %@ · 启用后生效";
 "Detected %@ · takes effect when enabled" = "已检测到 %@ · 启用后生效";

@@ -534,6 +534,22 @@ struct InstallerConfigurationTests {
         precondition(!badGateway.isReachable)
         precondition(badGateway.message == L10n.format("Public address returned HTTP %d", 502))
 
+        for (body, expected) in [
+            ("error code: 1033", L10n.text("Cloudflare Tunnel disconnected (HTTP 530 / 1033)")),
+            ("<span class=\"cf-error-code\">1033</span>", L10n.text("Cloudflare Tunnel disconnected (HTTP 530 / 1033)")),
+            ("Error 1016", L10n.text("Cloudflare origin DNS error (HTTP 530 / 1016)")),
+            ("Error 1000", L10n.format("Cloudflare error %d (HTTP 530)", 1000)),
+            ("request 1033", L10n.format("Public address returned HTTP %d", 530)),
+            (String(repeating: "x", count: 64 * 1024) + "Error 1033", L10n.format("Public address returned HTTP %d", 530)),
+        ] {
+            MockURLProtocol.handler = { request in
+                let response = HTTPURLResponse(url: request.url!, statusCode: 530, httpVersion: "HTTP/1.1", headerFields: nil)!
+                return (response, Data(body.utf8))
+            }
+            let result = await checker.check(publicMCPURL: publicMCPURL)
+            precondition(!result.isReachable && result.message == expected, "incorrect Cloudflare diagnostic: \(result.message)")
+        }
+
         MockURLProtocol.handler = { _ in
             throw URLError(.timedOut)
         }

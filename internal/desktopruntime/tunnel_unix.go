@@ -216,15 +216,7 @@ func platformLaunchTunnel(ctx context.Context, runtimeRoot string) error {
 				return err
 			}
 		}
-		arguments, err := prepareCloudflaredTunnelArgs(root, "run")
-		if err != nil {
-			return err
-		}
-		command := exec.CommandContext(ctx, manifest.CloudflaredBinary, arguments...)
-		command.Env = append(os.Environ(), "TUNNEL_TOKEN="+token)
-		command.Stdout = stdout
-		command.Stderr = stderr
-		return command.Run()
+		return runNamedTunnel(ctx, manifest, root, token, stdout, stderr)
 	default:
 		return errors.New("Tunnel 模式为 none")
 	}
