@@ -19,12 +19,12 @@
   },
   "file_change": {
     "file": "file_change.html",
-    "uri": "ui://agentdock/file-change/v2-85b92e9cb79e380e.html",
+    "uri": "ui://agentdock/file-change/v2-faa1ec2dab57ffe0.html",
     "legacy": "ui://agentdock/file-change",
     "contract": "agentdock.file-change.v1",
-    "sha256": "85b92e9cb79e380e20f9c9345acbfe2692cfb7ca60cc5bc4a8b23f2f876d088d",
-    "bytes": 517620,
-    "gzipBytes": 120204
+    "sha256": "faa1ec2dab57ffe020209bd77431f673f5c9fdf2faa70384b84974eb30ca97fb",
+    "bytes": 517887,
+    "gzipBytes": 120254
   },
   "dynamic_mcp": {
     "file": "dynamic_mcp.html",

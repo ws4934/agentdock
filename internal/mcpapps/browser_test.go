@@ -308,6 +308,23 @@ func TestFeedbackBrowser(t *testing.T) {
 	check(`messages.some(m=>m.id===800 && m.result && !m.error) && frame.contentWindow.__audit===undefined`)
 	check(`!messages.some(m=>m.method==='tools/call'||m.method==='ui/message')`)
 
+	// 文件操作结果自动挂载原卡片；预演、无变更和错误不得伪装成已写入。
+	open("file_change", "normal")
+	ready()
+	for _, action := range []string{"add", "replace", "patch", "move", "delete"} {
+		eval(`result({action:` + j(action) + `,path:'fixture.txt',files_changed:1,changed:true,dry_run:true,diff_preview:'-old\n+new'})`)
+		run(chromedp.Poll(doc+`.querySelector('h2').textContent==='变更预览'`, nil))
+		check(doc + `.querySelector('.card').dataset.tone==='neutral' && ` + doc + `.body.innerText.includes('尚未写入')`)
+		eval(`result({action:` + j(action) + `,path:'fixture.txt',files_changed:1,changed:true,diff_preview:'-old\n+new'})`)
+		run(chromedp.Poll(doc+`.querySelector('.card').dataset.tone==='success'`, nil))
+	}
+	eval(`result({action:'replace',path:'fixture.txt',files_changed:0,changed:false})`)
+	run(chromedp.Poll(doc+`.querySelector('h2').textContent==='没有文件变更'`, nil))
+	check(doc + `.querySelector('.card').dataset.tone==='neutral'`)
+	eval(`send('ui/notifications/tool-result',{isError:true,structuredContent:{error:'版本冲突，请重新读取'},content:[]})`)
+	run(chromedp.Poll(`!!`+doc+`.querySelector('[data-phase="error"]')`, nil))
+	check(`!` + doc + `.querySelector('[data-entity]') && !messages.some(m=>m.method==='tools/call'||m.method==='ui/message')`)
+
 	// Work results refresh only on explicit user input, use the read tool, and
 	// reject stale in-flight responses or results belonging to another task.
 	open("work_result", "normal")

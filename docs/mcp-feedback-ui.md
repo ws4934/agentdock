@@ -4,7 +4,9 @@
 
 `internal/mcpapps` 提供九种独立、内容寻址的反馈资源：能力概览、任务进度、文件变更、外部 MCP、文件下载、记忆、工作流、编程会话和工作结果。保留资源不等于每次调用都挂载它。
 
-自动 UI 绑定保留 `task_manage`、`work_result_freeze`、`work_result_show`、`file_publish` 和 `diagnostic_export`。生命周期与交付自带反馈，不依赖模型额外记住 show。`task_update`、`task_read`、`file_edit`、`agentdock_context`、`mcp_tool_call`、`acp_session`、工作流/记忆操作及 `work_result_read` 只返回数据。描述符和调用结果使用同一份绑定表，不允许只删结果元数据、却仍由描述符触发卡片。
+自动 UI 绑定保留 `task_manage`、`work_result_freeze`、`work_result_show`、`file_publish` 和 `diagnostic_export`，并恢复 `file_edit`、`agentdock_context`、`mcp_tool_call`、`acp_session`、`workflow_template_manage`、`recall_write` 的已有操作卡片。文件变更不再依赖任务汇总或额外 show；新增、替换、补丁、移动、删除均随原调用携带反馈，预演标记尚未写入，无变更不显示成功色，错误由组件错误态展示。可选集成只有启用后才暴露相应工具与资源。
+
+`task_update`、`task_read`、`work_result_read`、文件读取/搜索及执行状态轮询保持数据入口，不新增卡片。描述符、目录导出和调用结果使用同一份绑定表；不只删结果元数据，也不靠模型自觉补一次展示。卡片保留有界预览、差量更新和销毁清理；跨工具调用的多个 iframe 仍由宿主管理，不保证恢复更多操作卡片后总内存不增加。
 
 `task_manage` 只负责 create/block/resume/complete；`task_update` 负责 checkpoint/final_review；`task_read` 提供 list/get/snapshot。三个公开请求与契约分别定义，复用同一个任务领域服务，没有额外任务数据库或旧动作兼容转发。高频更新不挂载 iframe。最终 `work_result_freeze` 保存并展示交付；`work_result_show` 用于明确重新打开。工作结果卡的完整源码/执行证据仍只手动刷新，不能把实时任务检查点当成机器验收证据。
 

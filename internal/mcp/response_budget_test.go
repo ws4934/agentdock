@@ -77,7 +77,7 @@ func TestDynamicContentRelocatedWithoutCopyOrMutation(t *testing.T) {
 func TestHighFrequencyCallsNeverCreateFeedbackCards(t *testing.T) {
 	root := t.TempDir()
 	h := newMCPAppTestHarness(t, config.Config{AgentDockHome: filepath.Join(root, "home"), AgentDockDefaultDir: root})
-	dataOnly := map[string]bool{"agentdock_context": true, "file_edit": true, "task_update": true, "task_read": true, "mcp_tool_call": true, "work_result_read": true}
+	dataOnly := map[string]bool{"read_file": true, "read_files": true, "search_text": true, "task_update": true, "task_read": true, "job_observe": true, "work_result_read": true}
 	found := 0
 	for tool, err := range h.session.Tools(t.Context(), nil) {
 		if err != nil {

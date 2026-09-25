@@ -106,8 +106,8 @@ func TestMCPAppsResourceContractMatrix(t *testing.T) {
 					}
 				}
 			}
-			if len(bound) != 3 {
-				t.Fatalf("bound resource types %d want 3 lifecycle/delivery resources", len(bound))
+			if len(bound) != tt.count {
+				t.Fatalf("bound resource types %d want %d enabled feedback resources", len(bound), tt.count)
 			}
 			for _, uri := range []string{"ui://agentdock/not-found", "ui://agentdock/context/v2-forged.html", "file:///etc/passwd"} {
 				if _, err := h.server.ReadAppResource(uri); err == nil {
@@ -126,7 +126,9 @@ func TestMCPAppsInvokeKeepsDataToolsHeadless(t *testing.T) {
 		args      map[string]any
 		wantError bool
 	}{
-		{"agentdock_context", map[string]any{}, false}, {"file_edit", map[string]any{"action": "replace", "path": "missing", "old": "a", "new": "b"}, true},
+		{"task_read", map[string]any{"action": "list"}, false},
+		{"task_update", map[string]any{"action": "checkpoint", "task_id": "missing", "step_id": "check", "summary": "No task"}, true},
+		{"read_file", map[string]any{"path": "missing"}, true},
 	} {
 		result, err := h.server.Invoke(t.Context(), tc.name, tc.args)
 		if err != nil {
