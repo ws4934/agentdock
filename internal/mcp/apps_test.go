@@ -235,13 +235,13 @@ func TestMCPAppsBusinessResultsRemainStructured(t *testing.T) {
 	if !ok || createdTaskStructured["action"] != "create" || createdTaskStructured["view"] != nil || createdTaskStructured["task_summary"] == nil {
 		t.Fatalf("task_manage create structuredContent = %#v", createdTask.StructuredContent)
 	}
-	listedTasks, err := harness.session.CallTool(t.Context(), &mcpsdk.CallToolParams{Name: "task_manage", Arguments: map[string]any{"action": "list"}})
+	listedTasks, err := harness.session.CallTool(t.Context(), &mcpsdk.CallToolParams{Name: "task_read", Arguments: map[string]any{"action": "list"}})
 	if err != nil || listedTasks.IsError {
-		t.Fatalf("task_manage list result=%#v err=%v", listedTasks, err)
+		t.Fatalf("task_read list result=%#v err=%v", listedTasks, err)
 	}
 	listedStructured, ok := listedTasks.StructuredContent.(map[string]any)
 	if !ok || listedStructured["action"] != "list" || listedStructured["tasks"] == nil {
-		t.Fatalf("task_manage list structuredContent = %#v", listedTasks.StructuredContent)
+		t.Fatalf("task_read list structuredContent = %#v", listedTasks.StructuredContent)
 	}
 
 }

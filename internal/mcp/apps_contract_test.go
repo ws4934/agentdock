@@ -49,7 +49,7 @@ func TestMCPAppsResourceContractMatrix(t *testing.T) {
 					t.Fatalf("duplicate resource %s", r.URI)
 				}
 				available[r.URI] = true
-				assertResourceUIMeta(t, r.Meta, "https://dock.example.test", r.Name == "agentdock-work-result")
+				assertResourceUIMeta(t, r.Meta, "https://dock.example.test", (r.Name == "agentdock-work-result" || r.Name == "agentdock-task-progress"))
 				read, err := h.session.ReadResource(t.Context(), &mcpsdk.ReadResourceParams{URI: r.URI})
 				if err != nil {
 					t.Fatal(err)
@@ -57,14 +57,14 @@ func TestMCPAppsResourceContractMatrix(t *testing.T) {
 				if len(read.Contents) != 1 || read.Contents[0].URI != r.URI || read.Contents[0].MIMEType != "text/html;profile=mcp-app" {
 					t.Fatalf("invalid resource result %s", r.URI)
 				}
-				assertResourceUIMeta(t, read.Contents[0].Meta, "https://dock.example.test", r.Name == "agentdock-work-result")
+				assertResourceUIMeta(t, read.Contents[0].Meta, "https://dock.example.test", (r.Name == "agentdock-work-result" || r.Name == "agentdock-task-progress"))
 				// 桥接与直连必须服务同一份不可变产物。
 				bridge, err := h.server.ReadAppResource(r.URI)
 				if err != nil {
 					t.Fatal(err)
 				}
 				content := bridge["contents"].([]any)[0].(map[string]any)
-				assertResourceUIMeta(t, content["_meta"].(mcpsdk.Meta), "https://dock.example.test", r.Name == "agentdock-work-result")
+				assertResourceUIMeta(t, content["_meta"].(mcpsdk.Meta), "https://dock.example.test", (r.Name == "agentdock-work-result" || r.Name == "agentdock-task-progress"))
 				if content["text"] != read.Contents[0].Text || content["uri"] != r.URI {
 					t.Fatalf("bridge drift for %s", r.URI)
 				}
@@ -106,8 +106,8 @@ func TestMCPAppsResourceContractMatrix(t *testing.T) {
 					}
 				}
 			}
-			if len(bound) != 2 {
-				t.Fatalf("bound resource types %d want 2 explicit presentation resources", len(bound))
+			if len(bound) != 3 {
+				t.Fatalf("bound resource types %d want 3 lifecycle/delivery resources", len(bound))
 			}
 			for _, uri := range []string{"ui://agentdock/not-found", "ui://agentdock/context/v2-forged.html", "file:///etc/passwd"} {
 				if _, err := h.server.ReadAppResource(uri); err == nil {

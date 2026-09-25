@@ -61,6 +61,7 @@ type diagnosticReport struct {
 	TraceMode             string                     `json:"trace_mode"`
 	Events                []diagnostics.Event        `json:"events"`
 	ToolCount             int                        `json:"tool_count"`
+	ToolDiscovery         toolDiscoveryContext       `json:"tool_discovery"`
 	ManagedJobs           map[string]int             `json:"managed_jobs"`
 	ManagedJobsPartial    bool                       `json:"managed_jobs_partial"`
 	AuthConfigured        bool                       `json:"auth_configured"`
@@ -78,6 +79,7 @@ func (r *Runtime) diagnosticResult(ctx context.Context, probe bool) Result {
 		"response_delivery": {Status: "unknown", Reason: "execution_completion_does_not_prove_client_receipt"},
 		"ui_rendering":      {Status: "unknown", Reason: "host_mount_not_observable_from_Core"},
 	}}
+	report.ToolDiscovery = r.toolDiscoveryContext()
 	if !r.cfg.AuthRequired() {
 		report.Layers["authentication"] = diagnosticLayer{Status: "not_configured", Reason: "local_transport_trust_only"}
 	}

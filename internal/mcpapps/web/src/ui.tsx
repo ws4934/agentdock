@@ -11,11 +11,14 @@ import {
 import { type Store, type Snapshot } from "./store";
 import { WorkControls, type WorkActions } from "./work-controls";
 import { type Presentation, inlinePresentation } from "./presentation";
+import { LiveControls } from "./live-controls";
+import { type LiveSnapshot } from "./live-progress";
 
 export interface Actions extends WorkActions {
   reconnect(): void;
   open(url: string): Promise<void>;
   refresh?(request: Data): Promise<void>;
+  toggleLive?(): void;
 }
 function Rows({ group, locale }: { group: Group; locale: Locale }) {
   const [limit, setLimit] = useState(12);
@@ -108,17 +111,23 @@ function Card({
   locale: l,
   actions,
   presentation,
+  live,
 }: {
   model: Model;
   locale: Locale;
   actions: Actions;
   presentation: Presentation;
+  live?: LiveSnapshot;
 }) {
   const [expanded, setExpanded] = useState(false),
     [selected, setSelected] = useState(""),
     [linkError, setLinkError] = useState(""),
     [refreshing, setRefreshing] = useState(false),
     [refreshError, setRefreshError] = useState("");
+  useEffect(() => {
+    if (live?.lastConfirmed !== undefined && live.phase !== "error")
+      setRefreshError("");
+  }, [live?.lastConfirmed]);
   const tabs = m.tabs ?? [],
     active = tabs.find((t) => t.id === selected) ?? tabs[0];
   const groups = active?.groups ?? m.groups ?? [];
@@ -175,7 +184,15 @@ function Card({
   }
   return (
     <article class="card" data-tone={m.tone ?? "neutral"} data-entity={m.id}>
-      {m.task && <WorkControls key={m.task.id} model={m} locale={l} presentation={presentation} actions={actions} />}
+      {m.task && (
+        <WorkControls
+          key={m.task.id}
+          model={m}
+          locale={l}
+          presentation={presentation}
+          actions={actions}
+        />
+      )}
       <header>
         <div class="title-row">
           <span class="indicator" aria-hidden="true">
@@ -200,6 +217,14 @@ function Card({
         )}
       </header>
       <p class="summary">{m.summary}</p>
+      {m.live && live && (
+        <LiveControls
+          snapshot={live}
+          active={m.live.active}
+          locale={l}
+          toggle={() => actions.toggleLive?.()}
+        />
+      )}
       {m.refresh && actions.refresh && (
         <button
           class="text-button refresh-result"
@@ -309,7 +334,14 @@ function Feedback({
   const l = s.locale;
   if (s.model)
     return (
-      <Card key={s.model.id} model={s.model} locale={l} actions={actions} presentation={s.presentation ?? inlinePresentation()} />
+      <Card
+        key={s.model.id}
+        model={s.model}
+        locale={l}
+        actions={actions}
+        presentation={s.presentation ?? inlinePresentation()}
+        live={s.live}
+      />
     );
   const labels: Record<string, [string, string]> = {
     connecting: ["正在连接反馈组件", "Connecting to the host"],

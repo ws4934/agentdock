@@ -75,7 +75,7 @@ func TestRuntimeOutputContractDefaultToolSuccessPaths(t *testing.T) {
 		{name: "exec_command", args: map[string]any{"cmd": "printf contract-marker", "execution_mode": "sync"}},
 		{name: "session_observe", args: map[string]any{"action": "list"}},
 		{name: "session_act", args: map[string]any{"action": "kill_all"}},
-		{name: "task_manage", args: map[string]any{"action": "list"}},
+		{name: "task_read", args: map[string]any{"action": "list"}},
 		{name: "mcp_manage", args: map[string]any{"action": "list"}},
 		{name: "mcp_tool_search", args: map[string]any{"query": "*"}},
 		{name: "file_publish", args: map[string]any{"path": "contract.txt", "retention_seconds": 60}},

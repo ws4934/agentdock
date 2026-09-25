@@ -111,7 +111,7 @@ func TestActionSchemasRejectMissingBusinessArguments(t *testing.T) {
 		{"job_observe", map[string]any{"action": "logs"}},
 		{"validation_run", map[string]any{"request_id": "x", "adapter": "junit"}},
 		{"file_edit", map[string]any{"action": "move"}},
-		{"task_manage", map[string]any{"action": "get"}},
+		{"task_read", map[string]any{"action": "get"}},
 		{"skill_package", map[string]any{"action": "install"}},
 	}
 	r := newRuntimeValidationTestRuntime(t)

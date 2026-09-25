@@ -112,7 +112,7 @@ func TestAgentDockContextSchemaIsStructuredEntrypoint(t *testing.T) {
 	if !ok {
 		t.Fatal("agentdock_context output schema properties missing")
 	}
-	for _, name := range []string{"runtime", "skills", "dynamic_mcp", "acp", "workflow_templates", "recall", "rules", "warnings"} {
+	for _, name := range []string{"runtime", "skills", "dynamic_mcp", "acp", "workflow_templates", "recall", "rules", "warnings", "tool_discovery"} {
 		if _, ok := outputProps[name]; !ok {
 			t.Fatalf("agentdock_context output schema missing %q: %#v", name, outputProps)
 		}
@@ -121,7 +121,7 @@ func TestAgentDockContextSchemaIsStructuredEntrypoint(t *testing.T) {
 		t.Fatalf("agentdock_context output schema still exposes legacy Markdown context: %#v", outputProps)
 	}
 	required, ok := output["required"].([]string)
-	if !ok || !reflect.DeepEqual(required, []string{"runtime", "skills", "dynamic_mcp", "workflow_templates", "rules"}) {
+	if !ok || !reflect.DeepEqual(required, []string{"runtime", "skills", "dynamic_mcp", "workflow_templates", "rules", "tool_discovery"}) {
 		t.Fatalf("agentdock_context output schema required = %#v", output["required"])
 	}
 }
@@ -222,8 +222,15 @@ func assertObjectSchema(t *testing.T, name, kind string, schema map[string]any) 
 
 func TestTaskManageSchemaExposesLifecycleActions(t *testing.T) {
 	props := schemaProperties(t, "task_manage")
-	assertSameStrings(t, enumStrings(t, props["action"]), []string{"create", "list", "get", "checkpoint", "block", "resume", "final_review", "complete"})
-	for _, name := range []string{"completion_conditions", "steps", "step_id", "completed_step_ids", "current_step_id", "status", "summary", "verified", "risks"} {
+	assertSameStrings(t, enumStrings(t, props["action"]), []string{"create", "block", "resume", "complete"})
+	for _, field := range []string{"completion_conditions", "steps"} {
+		if props[field] == nil {
+			t.Fatal(field)
+		}
+	}
+	props = schemaProperties(t, "task_update")
+	assertSameStrings(t, enumStrings(t, props["action"]), []string{"checkpoint", "final_review"})
+	for _, name := range []string{"step_id", "completed_step_ids", "current_step_id", "status", "summary", "verified", "risks"} {
 		if _, ok := props[name]; !ok {
 			t.Fatalf("task_manage input schema missing %q", name)
 		}

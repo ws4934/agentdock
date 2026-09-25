@@ -77,7 +77,7 @@ func TestDynamicContentRelocatedWithoutCopyOrMutation(t *testing.T) {
 func TestHighFrequencyCallsNeverCreateFeedbackCards(t *testing.T) {
 	root := t.TempDir()
 	h := newMCPAppTestHarness(t, config.Config{AgentDockHome: filepath.Join(root, "home"), AgentDockDefaultDir: root})
-	dataOnly := map[string]bool{"agentdock_context": true, "file_edit": true, "task_manage": true, "mcp_tool_call": true, "work_result_read": true, "work_result_freeze": true}
+	dataOnly := map[string]bool{"agentdock_context": true, "file_edit": true, "task_update": true, "task_read": true, "mcp_tool_call": true, "work_result_read": true}
 	found := 0
 	for tool, err := range h.session.Tools(t.Context(), nil) {
 		if err != nil {
@@ -94,7 +94,7 @@ func TestHighFrequencyCallsNeverCreateFeedbackCards(t *testing.T) {
 		t.Fatal("missing data tools")
 	}
 	for i := 0; i < 100; i++ {
-		result, err := h.session.CallTool(t.Context(), &mcpsdk.CallToolParams{Name: "task_manage", Arguments: map[string]any{"action": "list"}})
+		result, err := h.session.CallTool(t.Context(), &mcpsdk.CallToolParams{Name: "task_read", Arguments: map[string]any{"action": "list"}})
 		if err != nil || result.IsError || result.Meta["ui"] != nil || result.StructuredContent == nil {
 			t.Fatalf("call %d: %#v %v", i, result, err)
 		}

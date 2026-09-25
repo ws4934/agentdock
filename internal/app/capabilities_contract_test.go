@@ -88,8 +88,8 @@ func TestRuntimeSuccessOutputsValidateNewCapabilities(t *testing.T) {
 	call("job_observe", map[string]any{"action": "logs", "job_id": id, "stream": "stdout", "offset": 0})
 	call("job_observe", map[string]any{"action": "evidence", "job_id": id})
 	call("job_control", map[string]any{"action": "cancel", "job_id": id})
-	call("task_manage", map[string]any{"action": "checkpoint", "task_id": taskID, "step_id": "verify", "status": "completed", "summary": "Fixture completed"})
-	call("task_manage", map[string]any{"action": "final_review", "task_id": taskID, "status": "pass", "summary": "Output fixture review", "verified": []string{"cond_01: fixture process completed"}})
+	call("task_update", map[string]any{"action": "checkpoint", "task_id": taskID, "step_id": "verify", "status": "completed", "summary": "Fixture completed"})
+	call("task_update", map[string]any{"action": "final_review", "task_id": taskID, "status": "pass", "summary": "Output fixture review", "verified": []string{"cond_01: fixture process completed"}})
 	call("task_manage", map[string]any{"action": "complete", "task_id": taskID})
 	request := map[string]any{"task_id": taskID, "workdir": root, "source_paths": []string{"capability-source.txt"}, "job_ids": []string{id}}
 	live := call("work_result_read", request)["work_result"].(workresult.Projection)

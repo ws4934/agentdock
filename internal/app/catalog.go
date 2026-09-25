@@ -14,6 +14,7 @@ import (
 type CatalogRequest struct {
 	Format string `json:"format,omitempty"`
 	Group  string `json:"group,omitempty"`
+	Name   string `json:"name,omitempty"`
 }
 
 func catalogContract(name string, _ config.Config) (ToolContract, bool) {
@@ -21,12 +22,16 @@ func catalogContract(name string, _ config.Config) (ToolContract, bool) {
 		return ToolContract{}, false
 	}
 	return ToolContract{
-		InputSchema:  contract.InputObject(map[string]any{"format": map[string]any{"type": "string", "enum": []string{"summary", "mcp", "openai"}, "description": "summary is compact; mcp/openai explicitly export schemas without changing enabled tools."}, "group": contract.String("Optional exact capability group id.")}),
+		InputSchema: contract.InputObject(map[string]any{
+			"format": map[string]any{"type": "string", "enum": []string{"summary", "mcp", "openai"}, "description": "summary is compact; mcp/openai explicitly export schemas without changing enabled tools."},
+			"group":  contract.String("Optional exact capability group id."),
+			"name":   map[string]any{"type": "string", "minLength": 1, "maxLength": 128, "description": "Optional exact built-in tool name. Use format=mcp and name=exec_command (or file_edit) when the client did not show parameter details. This only reads its schema; invoke the tool directly through the client, not mcp_tool_call."},
+		}),
 		OutputSchema: contract.OutputObject(map[string]any{"groups": contract.ObjectArray("Available groups."), "tools": contract.ObjectArray("Tools or namespace definitions, according to format."), "format": contract.String("Selected output format."), "count": contract.Integer("Available function count."), "catalog_revision": contract.String("Hash of this exact catalog."), "observation_only": contract.Boolean("No registration or permissions changed.")}, "groups", "tools", "format", "count", "catalog_revision", "observation_only"),
 	}, true
 }
 func catalogToolSpecs() []ToolSpec {
-	return []ToolSpec{{Name: "tool_catalog", Title: "Inspect grouped tools", Description: "Read the available tool catalog by capability group. Default returns compact names; explicitly select mcp or openai to export schemas. Does not enable tools, change permissions or make a client support lazy loading.", Contract: catalogContract, Annotations: readOnlyToolAnnotations(false), Handler: typedToolHandler("tool_catalog", func(_ context.Context, r *Runtime, request CatalogRequest) (Result, error) {
+	return []ToolSpec{{Name: "tool_catalog", Title: "Inspect grouped tools", Description: "Read registered built-in tools by group or exact name. Use format=mcp and name=exec_command or file_edit for one complete schema when parameters are not visible. Default returns compact names. Registration is not client visibility or authorization; discovery never enables tools, grants permissions, or executes them.", Contract: catalogContract, Annotations: readOnlyToolAnnotations(false), Handler: typedToolHandler("tool_catalog", func(_ context.Context, r *Runtime, request CatalogRequest) (Result, error) {
 		return ExportToolCatalog(r.cfg, request)
 	})}}
 }
@@ -47,6 +52,12 @@ func ExportToolCatalog(cfg config.Config, r CatalogRequest) (Result, error) {
 			return nil, fmt.Errorf("unknown group %q", r.Group)
 		}
 	}
+	if r.Name != "" {
+		spec, exists := toolSpecByName(r.Name)
+		if !exists || !spec.available(cfg) || (r.Group != "" && spec.Group != r.Group) {
+			return nil, fmt.Errorf("requested tool is not available in the selected catalog")
+		}
+	}
 	groups := []map[string]any{}
 	tools := []map[string]any{}
 	count := 0
@@ -56,7 +67,7 @@ func ExportToolCatalog(cfg config.Config, r CatalogRequest) (Result, error) {
 		}
 		members := []map[string]any{}
 		for _, spec := range toolSpecs {
-			if spec.Group != group.ID || !spec.available(cfg) {
+			if spec.Group != group.ID || !spec.available(cfg) || (r.Name != "" && spec.Name != r.Name) {
 				continue
 			}
 			d := spec.definition(cfg)

@@ -1,83 +1,83 @@
 {
   "agentdock_context": {
     "file": "agentdock_context.html",
-    "uri": "ui://agentdock/context/v2-e83877c7bf10f0a8.html",
+    "uri": "ui://agentdock/context/v2-18365c4a303f76a0.html",
     "legacy": "ui://agentdock/context",
     "contract": "agentdock.context.fleet.v1",
-    "sha256": "e83877c7bf10f0a8f4cfd7123c1770591c921709e05af7f270656bd354e599e1",
-    "bytes": 511623,
-    "gzipBytes": 118351
+    "sha256": "18365c4a303f76a0d97412d50b6e254a74072ed01975d6b590989c3d73d624d5",
+    "bytes": 518546,
+    "gzipBytes": 120546
   },
   "task_progress": {
     "file": "task_progress.html",
-    "uri": "ui://agentdock/task-progress/v2-e0edf62c2d5ba555.html",
+    "uri": "ui://agentdock/task-progress/v2-09f2d1995b1e952c.html",
     "legacy": "ui://agentdock/task-progress",
     "contract": "agentdock.task-progress.v1",
-    "sha256": "e0edf62c2d5ba5558ba38f4462f11e54cdabff6e62bb1f3f55acba9bd008ee8c",
-    "bytes": 511425,
-    "gzipBytes": 118239
+    "sha256": "09f2d1995b1e952cc9d98c8b2729665d8aebc72571de8582123959b1113881be",
+    "bytes": 518954,
+    "gzipBytes": 120554
   },
   "file_change": {
     "file": "file_change.html",
-    "uri": "ui://agentdock/file-change/v2-e16fc959d92e8a3d.html",
+    "uri": "ui://agentdock/file-change/v2-85b92e9cb79e380e.html",
     "legacy": "ui://agentdock/file-change",
     "contract": "agentdock.file-change.v1",
-    "sha256": "e16fc959d92e8a3da9d1339642cd2141440f008e48c313fea0645d53a4ac91bd",
-    "bytes": 510698,
-    "gzipBytes": 118016
+    "sha256": "85b92e9cb79e380e20f9c9345acbfe2692cfb7ca60cc5bc4a8b23f2f876d088d",
+    "bytes": 517620,
+    "gzipBytes": 120204
   },
   "dynamic_mcp": {
     "file": "dynamic_mcp.html",
-    "uri": "ui://agentdock/dynamic-mcp/v2-3980a76c465d04d5.html",
+    "uri": "ui://agentdock/dynamic-mcp/v2-492e00e867d2ab1d.html",
     "legacy": "ui://agentdock/dynamic-mcp",
     "contract": "agentdock.dynamic-mcp.v1",
-    "sha256": "3980a76c465d04d591cfec7e4ed0a7d9ba9946aedb4f0355cd1bd9b4bc2a544a",
-    "bytes": 510947,
-    "gzipBytes": 118065
+    "sha256": "492e00e867d2ab1d113e1f285d9bc85fcea2bb07d7666eaff782c86c1c09f027",
+    "bytes": 517869,
+    "gzipBytes": 120252
   },
   "artifact": {
     "file": "artifact.html",
-    "uri": "ui://agentdock/artifact/v2-ac2fea072b1f231b.html",
+    "uri": "ui://agentdock/artifact/v2-05c95fbb7b2a6587.html",
     "legacy": "ui://agentdock/artifact",
     "contract": "agentdock.artifact.v1",
-    "sha256": "ac2fea072b1f231b64113ea1f3df9bbe4d39fc9db6d728c74ab8442060984ce8",
-    "bytes": 510505,
-    "gzipBytes": 117975
+    "sha256": "05c95fbb7b2a6587863a5bb1ba9a881c4965ff810da12134f7f5926b931d4284",
+    "bytes": 517427,
+    "gzipBytes": 120156
   },
   "recall": {
     "file": "recall.html",
-    "uri": "ui://agentdock/recall/v2-e8f3eb5bb8ec3de7.html",
+    "uri": "ui://agentdock/recall/v2-ad2048296a6360e9.html",
     "legacy": "ui://agentdock/recall",
     "contract": "agentdock.recall.v1",
-    "sha256": "e8f3eb5bb8ec3de750c20e0fbbccd0568f1a06351c52a1d5e5944e5bec1cf48e",
-    "bytes": 510918,
-    "gzipBytes": 118087
+    "sha256": "ad2048296a6360e9e06055cf43179590e8eef61961618f7aca1a1783d06de636",
+    "bytes": 517840,
+    "gzipBytes": 120231
   },
   "workflow": {
     "file": "workflow.html",
-    "uri": "ui://agentdock/workflow/v2-7098dfd041fad006.html",
+    "uri": "ui://agentdock/workflow/v2-63e67f9f3af3e658.html",
     "legacy": "ui://agentdock/workflow",
     "contract": "agentdock.workflow.v1",
-    "sha256": "7098dfd041fad0061e0f61195a25566b94d0d2941d6283dceb3331dd7ebdbaa0",
-    "bytes": 510235,
-    "gzipBytes": 117818
+    "sha256": "63e67f9f3af3e658a125b58519484a77d274b2082bf3fbf71bedeb5ffb851813",
+    "bytes": 517157,
+    "gzipBytes": 119974
   },
   "acp_status": {
     "file": "acp_status.html",
-    "uri": "ui://agentdock/acp-status/v2-cefadd119fdafe21.html",
+    "uri": "ui://agentdock/acp-status/v2-3931163613a488c5.html",
     "legacy": "ui://agentdock/acp-status",
     "contract": "agentdock.acp-status.v1",
-    "sha256": "cefadd119fdafe21e99eddc30a1e5537a24fd7a9af2e5286626bf70926c11810",
-    "bytes": 510967,
-    "gzipBytes": 118102
+    "sha256": "3931163613a488c5a2510234f5d5cf62ed37a54fcae2dbf465f890febaeea8cb",
+    "bytes": 517889,
+    "gzipBytes": 120259
   },
   "work_result": {
     "file": "work_result.html",
-    "uri": "ui://agentdock/work-result/v2-a4ca6e0683326b30.html",
+    "uri": "ui://agentdock/work-result/v2-a22c770bb8f4cda4.html",
     "legacy": "ui://agentdock/work-result",
     "contract": "agentdock.work-result.v1",
-    "sha256": "a4ca6e0683326b303a411947a238df11071953b004782e24f440a9a707f42876",
-    "bytes": 513567,
-    "gzipBytes": 119081
+    "sha256": "a22c770bb8f4cda4635da71509f964a057f3399b214d168b11072efa2ef6bd76",
+    "bytes": 520486,
+    "gzipBytes": 121217
   }
 }

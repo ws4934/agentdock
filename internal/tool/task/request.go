@@ -13,7 +13,7 @@ type LearningCheckRequest struct {
 	OnFailure   string `json:"on_failure"`
 }
 
-// ManageRequest 只表达 task_manage 对模型公开的输入字段。
+// ManageRequest 是领域服务的统一命令；公开边界使用 LifecycleRequest、UpdateRequest 和 ReadRequest。
 // 持久化状态中的 phase、bound_at 等内部字段在规范化阶段由 Task 域模型补齐，不能从边界注入。
 type ManageRequest struct {
 	Action               string                 `json:"action"`

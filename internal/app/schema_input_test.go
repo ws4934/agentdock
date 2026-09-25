@@ -76,7 +76,7 @@ func TestInputSchemaPublishesRuntimeBounds(t *testing.T) {
 		{tool: "exec_command", property: "max_output_bytes", minimum: 1, maximum: toolcommand.MaxOutputBytes},
 		{tool: "session_observe", property: "max_output_bytes", minimum: 1, maximum: toolcommand.MaxOutputBytes},
 		{tool: "session_act", property: "max_output_bytes", minimum: 1, maximum: toolcommand.MaxOutputBytes},
-		{tool: "task_manage", property: "limit", minimum: 1, maximum: 200},
+		{tool: "task_read", property: "limit", minimum: 1, maximum: 200},
 		{tool: "view_image", property: "max_source_bytes", minimum: 1, maximum: 100 * 1024 * 1024},
 		{tool: "view_image", property: "max_bytes", minimum: 1, maximum: 2 * 1024 * 1024},
 		{tool: "view_image", property: "quality", minimum: 35, maximum: 95},

@@ -4,13 +4,21 @@
 
 `internal/mcpapps` 提供九种独立、内容寻址的反馈资源：能力概览、任务进度、文件变更、外部 MCP、文件下载、记忆、工作流、编程会话和工作结果。保留资源不等于每次调用都挂载它。
 
-自动 UI 绑定仅保留 `work_result_show`、`file_publish` 和 `diagnostic_export`。`task_manage`、`file_edit`、`agentdock_context`、`mcp_tool_call`、`acp_session`、工作流/记忆操作以及 `work_result_read`、`work_result_freeze` 都只返回数据。描述符和调用结果使用同一份绑定表，不允许只删结果元数据、却仍由旧描述符触发卡片。
+自动 UI 绑定保留 `task_manage`、`work_result_freeze`、`work_result_show`、`file_publish` 和 `diagnostic_export`。生命周期与交付自带反馈，不依赖模型额外记住 show。`task_update`、`task_read`、`file_edit`、`agentdock_context`、`mcp_tool_call`、`acp_session`、工作流/记忆操作及 `work_result_read` 只返回数据。描述符和调用结果使用同一份绑定表，不允许只删结果元数据、却仍由描述符触发卡片。
 
-中间检查用 `work_result_read`；显式可视化或最终交付用 `work_result_show`。展示工具与读取工具共享选择校验、任务/源码范围和权限逻辑，不重复执行命令。卡片内刷新仍只调用 `work_result_read`，不会重新挂载另一张卡片。不要每个检查点都调用 show。
+`task_manage` 只负责 create/block/resume/complete；`task_update` 负责 checkpoint/final_review；`task_read` 提供 list/get/snapshot。三个公开请求与契约分别定义，复用同一个任务领域服务，没有额外任务数据库或旧动作兼容转发。高频更新不挂载 iframe。最终 `work_result_freeze` 保存并展示交付；`work_result_show` 用于明确重新打开。工作结果卡的完整源码/执行证据仍只手动刷新，不能把实时任务检查点当成机器验收证据。
+
+## 有界自动更新（0.8.9）
+
+有效任务编号的进度卡，在宿主开放 serverTools 且卡片可见、任务 active 时自动读取 `task_read snapshot`。它只读取一个任务文件，不扫描 Git、不读取完整日志、不运行命令。读取携带 `if_revision`，相同版本只返回 unchanged；不同版本返回有界步骤、摘要和阻塞信息。卡片始终注明保存进度不证明进程还活着。
+
+首次读取延迟 1 秒，之后 5 秒；连续 3/10 次未变分别减频到 10/15 秒。一次最多一个在途请求和一个定时器，每次读取最多 10 秒，一次自动更新时段最多 15 分钟，随后提供继续更新按钮。手动暂停只暂停界面，不停止任务。隐藏、离开视口或断连时取消在途读取；恢复可见后重新观察。任务完成、受阻或归档后停止自动读取，可手动刷新。任何读取拒绝、超时或格式/身份错误均停止重试，显示上次观察，只有用户显式恢复才继续。
+
+新宿主结果、任务身份或连接代次发生变化后，旧在途结果失效。销毁时清理定时器、AbortController、可见性监听及 IntersectionObserver。每个可见卡片的读取独立有界，不宣称所有 iframe 共享连接或已经实现全局唯一刷新者；宿主是否真正挂载/卸载仍需实际客户端验证。
 
 ## 滚动与任务入口（0.8.7）
 
-工作结果资源通过 `openai/ui.availableDisplayModes` 和 MCP Apps 初始化能力同时声明 inline/fullscreen/pip；只有工作结果视图声明。组件以宿主返回的实际模式为准，不操作父页面 DOM，不承诺强制固定聊天消息。非 inline 由宿主提供固定视口，组件停止内容高度通知，在内部滚动并固定任务工具栏。
+任务进度和工作结果资源通过 `openai/ui.availableDisplayModes` 和 MCP Apps 初始化能力同时声明 inline/fullscreen/pip。组件以宿主返回的实际模式为准，不操作父页面 DOM，不承诺强制固定聊天消息。非 inline 由宿主提供固定视口，组件停止内容高度通知，在内部滚动并固定任务工具栏。
 
 任务编号可选中复制，卡片支持只读刷新、按需展开续接提示，以及用户点击后发送 `ui/message`。发送前检查宿主 `message.text` 能力、当前任务身份与状态；超时、断线或拒绝不自动重发。宿主收到请求不代表模型已经执行。冻结交付和已完成任务不提供自动续接按钮。
 
@@ -23,10 +31,12 @@ internal/mcpapps/
   apps.go                  Go embed 与资源查找
   apps_test.go             资源、摘要与包体预算校验
   browser_test.go          隔离 Chrome 行为与渲染性能
+  live_progress_browser_test.go 自动只读更新、暂停/隐藏/终态和多实例回收
   memory_test.go           多实例、保留 iframe 与循环回收的堆内存检查
   assets/                 九份生成 HTML 与 manifest
   web/
     src/bridge.ts         官方 SDK、主题、尺寸、连接及资源销毁
+    src/live-progress.ts  单请求有界更新调度器，与 DOM/协议解耦
     src/store.ts          有界展示模型、去重、语言切换及清理
     src/views/            独立视图适配器
     src/ui.tsx            共享布局与交互
@@ -74,7 +84,7 @@ npm run build
 npm run check:generated
 cd ../../..
 go test -race ./internal/app ./internal/mcp ./internal/mcpapps -count=1
-go test -tags mcpapps_browser ./internal/mcpapps -run '^TestFeedbackBrowser' -count=1 -timeout=4m -v
+go test -tags mcpapps_browser ./internal/mcpapps -run '^TestFeedbackBrowser' -count=1 -timeout=6m -v
 ```
 
 Chrome 测试使用独立临时用户目录和本机合成宿主，不接管用户标签页、读取凭据或执行真实 MCP 业务操作。非标准 Chrome 路径用 `AGENTDOCK_UI_CHROME` 指定。

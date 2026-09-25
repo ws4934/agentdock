@@ -7,6 +7,8 @@ import (
 // 本地适配共享协议的输出约束，不修改 Go module cache 或放宽任意字段。
 func localContextSchema(schema map[string]any) map[string]any {
 	props := schema["properties"].(map[string]any)
+	props["tool_discovery"] = toolDiscoverySchema()
+	contract.Require(schema, "tool_discovery")
 	props["acp"] = map[string]any{"type": "object", "additionalProperties": false,
 		"required": []string{"enabled", "default_profile", "profiles", "description"},
 		"properties": map[string]any{

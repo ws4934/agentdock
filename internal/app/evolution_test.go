@@ -102,7 +102,7 @@ func TestTaskFinalReviewAutomaticallyResolvesPreboundLearningCheck(t *testing.T)
 		t.Fatal(err)
 	}
 	taskID := created["task_id"].(string)
-	final, err := runtime.Call(t.Context(), "task_manage", map[string]any{
+	final, err := runtime.Call(t.Context(), "task_update", map[string]any{
 		"action": "final_review", "task_id": taskID, "status": "pass", "summary": "真实验证通过",
 		"verified": []string{"目标行为真实发生"},
 	})

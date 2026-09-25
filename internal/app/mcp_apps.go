@@ -8,11 +8,14 @@ type UIBinding struct {
 	ResourceURI string
 }
 
-// 中间执行/观察只返回数据；显式展示和文件交付才创建 iframe。
+// 生命周期和交付入口自带反馈；高频 task_update/task_read 不绑定资源。
+// 描述符与结果共享此表，不能仅删结果元数据来抑制宿主挂载。
 var toolUIBindings = map[string]UIBinding{
-	"work_result_show":  {ResourceURI: "ui://agentdock/work-result"},
-	"diagnostic_export": {ResourceURI: protocol.ArtifactUIResourceURI},
-	"file_publish":      {ResourceURI: protocol.ArtifactUIResourceURI},
+	"task_manage":        {ResourceURI: protocol.TaskProgressUIResourceURI},
+	"work_result_freeze": {ResourceURI: "ui://agentdock/work-result"},
+	"work_result_show":   {ResourceURI: "ui://agentdock/work-result"},
+	"diagnostic_export":  {ResourceURI: protocol.ArtifactUIResourceURI},
+	"file_publish":       {ResourceURI: protocol.ArtifactUIResourceURI},
 }
 
 func toolUIBinding(name string) *UIBinding {

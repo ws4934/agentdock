@@ -8,6 +8,7 @@ import {
   tr,
   tone,
 } from "../model";
+import { taskID } from "../presentation";
 export const normalize: Normalizer = (d, l) => {
   if (
     !["task", "task_summary", "tasks", "task_id"].some((key) =>
@@ -32,17 +33,40 @@ export const normalize: Normalizer = (d, l) => {
     : Object.keys(object(d.task_summary)).length
       ? object(d.task_summary)
       : d;
-  const steps = records(t.steps);
+  const steps = records(t.steps, 12);
+  const id = taskID(t.id ?? d.task_id);
+  const revision = text(t.revision ?? d.revision, 80);
   const current = object(t.current_step);
   const active =
     steps.find((s) => s.status === "in_progress" || s.status === "blocked") ||
     current;
-  const total = number(t.step_count) || steps.length,
-    done = Math.min(total, number(t.completed_step_count));
+  const total = Math.min(12, number(t.step_count) || steps.length),
+    done = Math.min(
+      total,
+      typeof t.completed_step_count === "number"
+        ? number(t.completed_step_count)
+        : steps.filter((s) => s.status === "completed").length,
+    );
   return {
     id: text(t.id ?? d.task_id) || "task",
     title: text(t.title) || tr(l, "任务进度", "Task progress"),
+    task: id
+      ? {
+          id,
+          canContinue:
+            !t.archived_at && ["active", "blocked"].includes(text(t.status)),
+        }
+      : undefined,
+    live: id
+      ? {
+          id,
+          revision: /^tsk1:[a-f0-9]{64}$/.test(revision) ? revision : undefined,
+          active: t.status === "active" && !t.archived_at,
+        }
+      : undefined,
+    refresh: id ? { action: "snapshot", task_id: id } : undefined,
     summary:
+      (t.status === "blocked" ? text(t.blocker) : "") ||
       text(t.summary ?? d.summary) ||
       text(active.title) ||
       tr(l, "等待下一步", "Waiting for the next step"),
@@ -50,6 +74,11 @@ export const normalize: Normalizer = (d, l) => {
     tone: tone(t.status),
     progress: total ? { done, total } : undefined,
     metrics: [
+      tr(
+        l,
+        "保存的任务进度，不代表进程仍在运行",
+        "Saved progress, not proof of a running process",
+      ),
       ...(active.title
         ? [tr(l, "当前：", "Current: ") + text(active.title, 200)]
         : []),

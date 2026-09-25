@@ -32,6 +32,7 @@ export interface Model {
   empty?: boolean;
   refresh?: Data;
   task?: { id: string; canContinue: boolean };
+  live?: { id: string; revision?: string; active: boolean };
 }
 export type Normalizer = (data: Data, locale: Locale) => Model;
 export const object = (value: unknown): Data =>

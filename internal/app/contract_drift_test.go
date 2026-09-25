@@ -39,12 +39,12 @@ func TestAllToolDefinitionsHaveStrictCompilableInputContracts(t *testing.T) {
 }
 
 func TestBuiltInInputValidatorCacheUsesSchemaContent(t *testing.T) {
-	withoutNexus := tooltask.ManageInputSchema(config.Config{})
+	withoutNexus := testInputSchemaForConfig("task_manage", config.Config{})
 	first, err := compileBuiltInInputValidator(withoutNexus)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := compileBuiltInInputValidator(tooltask.ManageInputSchema(config.Config{}))
+	second, err := compileBuiltInInputValidator(testInputSchemaForConfig("task_manage", config.Config{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestBuiltInInputValidatorCacheUsesSchemaContent(t *testing.T) {
 		t.Fatal("identical built-in schemas should reuse the compiled validator")
 	}
 
-	withNexus, err := compileBuiltInInputValidator(tooltask.ManageInputSchema(config.Config{NexusEndpoint: "http://127.0.0.1:18777"}))
+	withNexus, err := compileBuiltInInputValidator(testInputSchemaForConfig("task_manage", config.Config{NexusEndpoint: "http://127.0.0.1:18777"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,9 @@ func TestTypedToolRequestFieldsMatchPublishedSchemas(t *testing.T) {
 		{name: toolcommand.ToolExecCommand, request: toolcommand.ExecRequest{}, exact: true, allowExtra: []string{"runtime", "wsl_distribution"}},
 		{name: toolcommand.ToolSessionObserve, request: toolcommand.SessionObserveRequest{}, exact: true},
 		{name: toolcommand.ToolSessionAct, request: toolcommand.SessionActRequest{}, exact: true},
-		{name: tooltask.ToolTaskManage, request: tooltask.ManageRequest{}, exact: true},
+		{name: tooltask.ToolTaskManage, request: tooltask.LifecycleRequest{}, exact: true},
+		{name: tooltask.ToolTaskUpdate, request: tooltask.UpdateRequest{}, exact: true},
+		{name: tooltask.ToolTaskRead, request: tooltask.ReadRequest{}, exact: true},
 		{name: "workflow_template_manage", request: tooltask.WorkflowRequest{}},
 		{name: evolution.ToolName, request: evolution.Request{}},
 		{name: toolacp.ToolSession, request: toolacp.SessionRequest{}, exact: true},

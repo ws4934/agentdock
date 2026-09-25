@@ -23,9 +23,11 @@ export interface Snapshot {
   model?: Model;
   message?: string;
   presentation?: Presentation;
+  live?: LiveSnapshot;
 }
 
 import { type Presentation } from "./presentation";
+import { type LiveSnapshot } from "./live-progress";
 
 // 收敛为有界的展示模型；重复快照不触发订阅者，不比较整份业务结果。
 export class Store {
@@ -35,6 +37,7 @@ export class Store {
   private models: Partial<Record<Locale, Model>> = {};
   private ended = false;
   private presentation?: Presentation;
+  private live?: LiveSnapshot;
   constructor(
     private normalize: Normalizer,
     locale: Locale,
@@ -50,6 +53,7 @@ export class Store {
   private set(next: Snapshot): void {
     if (this.ended) return;
     if (this.presentation) next = { ...next, presentation: this.presentation };
+    if (this.live) next = { ...next, live: this.live };
     const key = JSON.stringify(next);
     if (this.key === key) return;
     this.key = key;
@@ -66,8 +70,14 @@ export class Store {
     this.set({ ...this.snapshot, presentation });
   }
   locale(locale: Locale): void {
+    if (this.ended) return;
     if (locale === this.snapshot.locale) return;
     this.set({ ...this.snapshot, locale, model: this.models[locale] });
+  }
+  setLive(live: LiveSnapshot): void {
+    if (this.ended) return;
+    this.live = live;
+    this.set({ ...this.snapshot, live });
   }
   result(envelope: unknown): void {
     if (this.ended) return;
@@ -141,6 +151,7 @@ export class Store {
   dispose(): void {
     this.ended = true;
     this.presentation = undefined;
+    this.live = undefined;
     this.models = {};
     this.snapshot = { phase: "empty", locale: this.snapshot.locale };
     this.key = "";

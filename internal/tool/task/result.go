@@ -59,7 +59,7 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		"id": task.ID, "title": task.Title, "status": task.Status, "phase": task.Phase,
 		"completed_step_count": completedSteps, "step_count": len(task.Steps), "steps": steps,
 		"condition_count": len(task.Conditions), "condition_refs": conditionRefs, "review_status": reviewStatus(task),
-		"updated_at": task.UpdatedAt,
+		"updated_at": task.UpdatedAt, "revision": taskstate.ManagementRevision(task),
 	}
 	if task.ArchivedAt != nil {
 		summary["archived_at"] = task.ArchivedAt

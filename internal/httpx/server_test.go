@@ -235,7 +235,11 @@ func TestRuntimeAPIDeletesOnlySelectedTask(t *testing.T) {
 		{"action": "final_review", "task_id": deletedTaskID, "status": "pass", "summary": "fixture verified", "verified": []string{"fixture ready for deletion"}},
 		{"action": "complete", "task_id": deletedTaskID},
 	} {
-		if _, err := runtime.Call(context.Background(), "task_manage", args); err != nil {
+		tool := "task_update"
+		if args["action"] == "complete" {
+			tool = "task_manage"
+		}
+		if _, err := runtime.Call(context.Background(), tool, args); err != nil {
 			t.Fatal(err)
 		}
 	}

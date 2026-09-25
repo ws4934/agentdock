@@ -71,7 +71,7 @@ func TestAgentDockContextToolReturnsStructuredRuntimeIndex(t *testing.T) {
 		t.Fatalf("runtime paths = %#v", got.Runtime)
 	}
 	rules := strings.Join(got.Rules, "\n")
-	for _, want := range []string{"AgentDock 自带工具直接调用", "同名时始终优先 skills", "common_skills.truncated=true", "task_manage checkpoint"} {
+	for _, want := range []string{"AgentDock 自带工具直接调用", "同名时始终优先 skills", "common_skills.truncated=true", "task_update checkpoint"} {
 		if !strings.Contains(rules, want) {
 			t.Fatalf("context rules missing %q: %s", want, rules)
 		}
@@ -278,7 +278,7 @@ func TestAgentDockLocalContextSkipsSharedNexusLookups(t *testing.T) {
 			t.Fatalf("local-only context leaked shared rule %q: %s", sharedRule, rules)
 		}
 	}
-	if !strings.Contains(rules, "task_manage checkpoint") {
+	if !strings.Contains(rules, "task_update checkpoint") {
 		t.Fatalf("local-only context lost device rule: %s", rules)
 	}
 }

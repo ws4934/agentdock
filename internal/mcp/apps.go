@@ -36,7 +36,7 @@ func (s *Server) appResourceDefinitions() []appResourceDefinition {
 			URI:         protocol.TaskProgressUIResourceURI,
 			Name:        "agentdock-task-progress",
 			Title:       "AgentDock task",
-			Description: "Compact read-only task lifecycle view for task_manage results and task snapshots.",
+			Description: "Automatic task lifecycle card with bounded read-only progress updates, pause/resume and host-supported floating display. Never executes tasks.",
 			HTML:        mcpapps.HTML("task_progress", "Task"),
 		},
 		{
@@ -165,7 +165,7 @@ func appResourceReadResult(definition appResourceDefinition, widgetDomain string
 
 func appResourceMetaForDefinition(definition appResourceDefinition, widgetDomain string) mcpsdk.Meta {
 	meta := appResourceMeta(widgetDomain)
-	if definition.Name == "agentdock-work-result" {
+	if definition.Name == "agentdock-work-result" || definition.Name == "agentdock-task-progress" {
 		meta["openai/ui"] = map[string]any{"availableDisplayModes": []string{"inline", "fullscreen", "pip"}}
 		meta["openai/widgetDescription"] = "A task observation with optional host-controlled floating/fullscreen display, read-only refresh and an explicit user continuation request. Reopen tasks from the native Task center; never replay completed work."
 	}
