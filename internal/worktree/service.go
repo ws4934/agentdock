@@ -238,7 +238,7 @@ func (s *Service) Status(ctx context.Context, id string) (Record, error) {
 	if err != nil {
 		return record, err
 	}
-	if !strings.Contains(string(data), "worktree "+record.Path+"\x00") {
+	if !registeredWorktree(data, record.Path) {
 		record.Status = "unavailable"
 		record.Failure = "worktree_registration_missing"
 		return record, nil
