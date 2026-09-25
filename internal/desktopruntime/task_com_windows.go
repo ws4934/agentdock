@@ -64,14 +64,6 @@ type iDispatch struct {
 	lpVtbl *iDispatchVtbl
 }
 
-type variant struct {
-	VT         uint16
-	wReserved1 uint16
-	wReserved2 uint16
-	wReserved3 uint16
-	Val        int64
-}
-
 type dispParams struct {
 	rgvarg            *variant
 	rgdispidNamedArgs *int32
@@ -340,7 +332,7 @@ func variantDispatch(value variant) *iDispatch {
 	if value.VT != 9 && value.VT != 13 {
 		return nil
 	}
-	// VARIANT 的 Val 是 8 字节 union。通过 union 存储槽本身恢复 COM 指针，
+	// Val 是完整原生 union 的首个存储槽。通过存储槽本身恢复 COM 指针，
 	// 不把整数临时值再转换成 unsafe.Pointer，避免破坏 Go 的指针生命周期规则。
 	return *(**iDispatch)(unsafe.Pointer(&value.Val))
 }

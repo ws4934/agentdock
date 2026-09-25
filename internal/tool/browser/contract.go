@@ -49,7 +49,7 @@ func InputSchema(name string) (map[string]any, bool) {
 			"additionalProperties": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}},
 		}
 		props["reload_after_local_storage"] = boolProp("Reload the final URL after localStorage injection. Defaults to true.")
-		props["max_age_ms"] = map[string]any{"type": "integer", "description": "For cleanup_stale, remove current-process sessions inactive for this age. Defaults to 6 hours.", "minimum": 1, "maximum": 31536000000}
+		props["max_age_ms"] = map[string]any{"type": "integer", "description": "For cleanup_stale, remove current-process sessions inactive for this age. Defaults to 6 hours.", "minimum": 1, "maximum": int64(31536000000)}
 		props["timeout_ms"] = boundedIntProp("Operation timeout in milliseconds. Defaults to 30000 and is capped at 300000.", 1, 300000)
 		required = []string{"action"}
 	case ToolAct:
