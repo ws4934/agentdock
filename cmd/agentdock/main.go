@@ -27,6 +27,9 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	if len(args) > 0 && args[0] == "tools" {
+		return runToolsCommand(args[1:], stdout, stderr)
+	}
 	if len(args) > 0 && args[0] == "secure-tunnel" {
 		return securetunnel.Command(ctx, args[1:], stdout, stderr)
 	}

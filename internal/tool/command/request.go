@@ -28,6 +28,8 @@ type ExecRequest struct {
 
 // SessionObserveRequest 是 session_observe 的强类型输入。
 type SessionObserveRequest struct {
+	StdoutOffset   *int64 `json:"stdout_offset,omitempty"`
+	StderrOffset   *int64 `json:"stderr_offset,omitempty"`
 	Action         string `json:"action,omitempty"`
 	SessionID      string `json:"session_id,omitempty"`
 	MaxOutputBytes *int   `json:"max_output_bytes,omitempty"`

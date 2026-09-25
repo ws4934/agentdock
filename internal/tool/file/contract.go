@@ -29,7 +29,6 @@ func InputSchema(name string) (map[string]any, bool) {
 		return schema, true
 	}
 	stringProp := toolcontract.String
-	intProp := toolcontract.Integer
 	boolProp := toolcontract.Boolean
 	boundedIntProp := toolcontract.BoundedInteger
 	props := map[string]any{}
@@ -37,11 +36,12 @@ func InputSchema(name string) (map[string]any, bool) {
 
 	switch name {
 	case ToolReadFile:
+		props["cursor"] = map[string]any{"type": "string", "maxLength": 1024, "description": "Opaque next_cursor returned by a truncated read; binds file revision and intra-line position. Omit start_line/end_line."}
 		props["expected_read_revision"] = stringProp("Optional whole-file revision from read_file; mismatch fails rather than reading changed source.")
 		props["path"] = stringProp(PathDescription("Host path. Relative paths resolve from ~/AgentDock."))
 		AddRuntimeProperties(props)
-		props["start_line"] = intProp("1-based start line.")
-		props["end_line"] = intProp("Inclusive end line.")
+		props["start_line"] = boundedIntProp("1-based start line. Do not combine with cursor.", 1, 2147483200)
+		props["end_line"] = boundedIntProp("Inclusive end line, not before start_line.", 1, 2147483647)
 		props["max_bytes"] = boundedIntProp("Maximum output bytes. Defaults to 262144 and is capped at 4194304.", 1, MaxTextOutputBytes)
 		required = []string{"path"}
 	case ToolListDir:
@@ -91,7 +91,22 @@ func InputSchema(name string) (map[string]any, bool) {
 	default:
 		return nil, false
 	}
-	return toolcontract.InputObject(props, required...), true
+	schema := toolcontract.InputObject(props, required...)
+	switch name {
+	case ToolReadFile:
+		toolcontract.ForbidTogether(schema, "cursor", "start_line")
+		toolcontract.ForbidTogether(schema, "cursor", "end_line")
+	case ToolFileEdit:
+		for _, branch := range []struct {
+			action string
+			fields []string
+		}{
+			{"replace", []string{"path", "old", "new"}}, {"add", []string{"path", "content"}}, {"delete", []string{"path"}}, {"move", []string{"path", "new_path"}}, {"patch", []string{"patch"}},
+		} {
+			toolcontract.RequireWhen(schema, "action", branch.action, branch.fields...)
+		}
+	}
+	return schema, true
 }
 
 func OutputSchema(name string) (map[string]any, bool) {
@@ -117,7 +132,9 @@ func OutputSchema(name string) (map[string]any, bool) {
 		props["truncated_reason"] = stringProp("Reason output was truncated.")
 		props["start_line"] = intProp("Returned start line.")
 		props["end_line"] = intProp("Returned end line.")
-		props["next_start_line"] = intProp("Next line to read when output was truncated.")
+		props["next_start_line"] = intProp("Continuation line; may be partially returned. Prefer next_cursor.")
+		props["next_start_byte"] = intProp("Byte offset within continuation line.")
+		props["next_cursor"] = stringProp("Exact revision-bound cursor for lossless continuation, including long lines.")
 		props["total_lines"] = intProp("Total line count.")
 	case ToolListDir:
 		props["path"] = stringProp("Listed Host directory path. Relative paths resolve from ~/AgentDock.")
@@ -185,5 +202,19 @@ func OutputSchema(name string) (map[string]any, bool) {
 		return nil, false
 	}
 	AddRuntimeOutputProperties(props)
-	return toolcontract.OutputObject(props, required...), true
+	schema := toolcontract.OutputObject(props, required...)
+	switch name {
+	case ToolReadFile:
+		toolcontract.Require(schema, "path", "content", "encoding", "size_bytes", "truncated", "start_line", "end_line", "total_lines")
+	case ToolSearchText:
+		toolcontract.Require(schema, "matches", "engine", "truncated")
+	case ToolFileEdit:
+		toolcontract.Require(schema, "action", "dry_run", "summary")
+		for _, a := range []string{"replace", "add", "delete", "move"} {
+			toolcontract.RequireWhen(schema, "action", a, "path")
+		}
+		toolcontract.RequireWhen(schema, "action", "move", "new_path")
+		toolcontract.RequireWhen(schema, "action", "patch", "affected_files")
+	}
+	return schema, true
 }

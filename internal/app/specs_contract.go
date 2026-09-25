@@ -36,12 +36,13 @@ func canonicalToolContract(name string, _ config.Config) (ToolContract, bool) {
 		return ToolContract{}, false
 	}
 	if name == mcpcontract.ToolAgentDockContext {
-		return ToolContract{InputSchema: inputSchema, OutputSchema: mcpcontract.LocalAgentDockContextOutputSchema()}, true
+		return ToolContract{InputSchema: inputSchema, OutputSchema: localContextSchema(mcpcontract.LocalAgentDockContextOutputSchema())}, true
 	}
 	outputSchema, ok := mcpcontract.OutputSchema(name)
 	if !ok {
 		return ToolContract{}, false
 	}
+	constrainSharedOutput(name, outputSchema)
 	return ToolContract{InputSchema: inputSchema, OutputSchema: outputSchema}, true
 }
 

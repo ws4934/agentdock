@@ -67,6 +67,10 @@ func taskManageInputObject(props map[string]any) map[string]any {
 		},
 		"then": map[string]any{"required": []string{"title", "goal", "completion_conditions"}},
 	}}
+	for _, a := range []string{"get", "checkpoint", "block", "resume", "final_review", "complete"} {
+		toolcontract.RequireWhen(schema, "action", a, "task_id")
+	}
+	toolcontract.RequireWhen(schema, "action", "final_review", "status")
 	return schema
 }
 
@@ -94,7 +98,13 @@ func ManageOutputSchema(cfg config.Config) map[string]any {
 		props["evolution_candidates"] = arrayProp("Read-only candidate experiences that the saved final_review may verify.")
 		props["evolution_warning"] = stringProp("Non-blocking evolution-side warning; Task lifecycle still succeeded.")
 	}
-	return toolcontract.OutputObject(props)
+	schema := toolcontract.OutputObject(props, "action")
+	toolcontract.RequireWhen(schema, "action", "list", "tasks", "count")
+	toolcontract.RequireWhen(schema, "action", "get", "task")
+	for _, a := range []string{"create", "checkpoint", "block", "resume", "final_review", "complete"} {
+		toolcontract.RequireWhen(schema, "action", a, "task_id", "task_summary")
+	}
+	return schema
 }
 
 func InputSchema(name string, cfg config.Config) (map[string]any, bool) {

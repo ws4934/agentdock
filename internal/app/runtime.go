@@ -39,37 +39,48 @@ import (
 type Result = toolcore.Result
 
 type Runtime struct {
-	cfg            config.Config
-	toolNames      []string
-	toolValidators map[string]*toolcontract.InputValidator
-	ws             *workspace.Workspace
-	skills         *toolskill.Service
-	command        *toolcommand.Service
-	files          *toolfile.Service
-	dynamicMCP     *toolmcp.Service
-	media          *toolmedia.Service
-	desktop        *tooldesktop.Service
-	browser        *toolbrowser.Service
-	recall         *toolrecall.Service
-	evolution      *evolution.Service
-	taskTools      *tooltask.Service
-	workResults    *workresult.Service
-	navigation     *semantic.Service
-	worktrees      *worktree.Service
-	traces         *diagnostics.Recorder
-	acp            *toolacp.Service
-	lifecycleMu    sync.RWMutex
-	commandCtx     context.Context
-	commandCancel  context.CancelFunc
-	closing        bool
-	closeOnce      sync.Once
-	closeErr       error
+	cfg              config.Config
+	toolNames        []string
+	toolValidators   map[string]*toolcontract.InputValidator
+	outputValidators map[string]*toolcontract.InputValidator
+	ws               *workspace.Workspace
+	skills           *toolskill.Service
+	command          *toolcommand.Service
+	files            *toolfile.Service
+	dynamicMCP       *toolmcp.Service
+	media            *toolmedia.Service
+	desktop          *tooldesktop.Service
+	browser          *toolbrowser.Service
+	recall           *toolrecall.Service
+	evolution        *evolution.Service
+	taskTools        *tooltask.Service
+	workResults      *workresult.Service
+	navigation       *semantic.Service
+	worktrees        *worktree.Service
+	traces           *diagnostics.Recorder
+	acp              *toolacp.Service
+	lifecycleMu      sync.RWMutex
+	commandCtx       context.Context
+	commandCancel    context.CancelFunc
+	closing          bool
+	closeOnce        sync.Once
+	closeErr         error
 }
 
 func NewRuntime(cfg config.Config) (*Runtime, error) {
+	cfg.ToolGroups = append([]string(nil), cfg.ToolGroups...)
 	toolNames, toolValidators, err := compileAvailableToolContracts(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("initialize tool contracts: %w", err)
+	}
+	outputValidators := make(map[string]*toolcontract.InputValidator, len(toolNames))
+	for _, name := range toolNames {
+		def, _ := toolDefinitionForConfig(name, cfg)
+		validator, err := compileBuiltInInputValidator(def.OutputSchema)
+		if err != nil {
+			return nil, fmt.Errorf("compile output %s: %w", name, err)
+		}
+		outputValidators[name] = validator
 	}
 	ws, err := workspace.New(cfg.AgentDockDefaultDir)
 	if err != nil {
@@ -95,7 +106,7 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	commandCtx, commandCancel := context.WithCancel(context.Background())
 	runtime := &Runtime{
 		cfg: cfg, ws: ws, skills: skills,
-		toolNames: toolNames, toolValidators: toolValidators,
+		toolNames: toolNames, toolValidators: toolValidators, outputValidators: outputValidators,
 		commandCtx: commandCtx, commandCancel: commandCancel,
 	}
 	runtime.command = toolcommand.New(func() config.Config { return runtime.cfg }, ws, envs, skills.ResolveActive, runtime.commandExecutionContext)
@@ -153,7 +164,11 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	return runtime, nil
 }
 
-func (r *Runtime) Config() config.Config           { return r.cfg }
+func (r *Runtime) Config() config.Config {
+	c := r.cfg
+	c.ToolGroups = append([]string(nil), r.cfg.ToolGroups...)
+	return c
+}
 func (r *Runtime) Workspace() *workspace.Workspace { return r.ws }
 
 func (r *Runtime) Close() error {
@@ -255,6 +270,9 @@ func (r *Runtime) Call(ctx context.Context, name string, args map[string]any) (r
 			finish(err == nil, code)
 		}()
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if args == nil {
 		args = map[string]any{}
 	}
@@ -265,7 +283,14 @@ func (r *Runtime) Call(ctx context.Context, name string, args map[string]any) (r
 	if !ok || spec.Handler == nil {
 		return nil, toolErrorDetails("UNKNOWN_TOOL", "tool has no handler", "validation", map[string]any{"tool": name})
 	}
-	return spec.Handler(ctx, r, args)
+	result, err = invokeToolHandler(ctx, r, spec.Handler, args)
+	if err != nil {
+		return result, err
+	}
+	if err := r.outputValidators[name].ValidateValue(result, 32<<20); err != nil {
+		return nil, toolErrorDetails("OUTPUT_CONTRACT_VIOLATION", "tool produced an invalid or oversized result; effects may already have occurred; do not replay mutations", "runtime", map[string]any{"tool": name, "reason": toolcontract.CompactValidationError(err)})
+	}
+	return result, nil
 }
 
 func (r *Runtime) validateToolArguments(name string, args map[string]any) error {
@@ -285,4 +310,15 @@ func (r *Runtime) validateToolArguments(name string, args map[string]any) error 
 		)
 	}
 	return nil
+}
+
+// 非预期处理器异常必须成为明确失败，不能留下成功 trace 或诱导重放写操作。
+func invokeToolHandler(ctx context.Context, r *Runtime, handler ToolHandler, args map[string]any) (result Result, err error) {
+	defer func() {
+		if recover() != nil {
+			result = nil
+			err = toolError("TOOL_PANIC", "tool handler failed; operation outcome is unconfirmed; do not replay mutations", "runtime")
+		}
+	}()
+	return handler(ctx, r, args)
 }

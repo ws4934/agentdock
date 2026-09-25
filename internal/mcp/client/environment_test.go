@@ -70,7 +70,7 @@ func TestHTTPHeaderUsesScopedEnvironmentBeforeHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := (&http.Client{Transport: headerRoundTripper{headers: headers}}).Do(request)
+	response, err := (&http.Client{Transport: headerRoundTripper{headers: headers, origin: origin(server.URL)}}).Do(request)
 	if err != nil {
 		t.Fatal(err)
 	}

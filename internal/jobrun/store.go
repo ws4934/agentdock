@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -13,8 +14,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/uvwt/agentdock/internal/fs/atomicfile"
@@ -27,6 +28,8 @@ var idPattern = regexp.MustCompile(`^job_[a-f0-9]{32}$`)
 var requestPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
 
 type Store struct {
+	indexMu    sync.Mutex
+	indexCache map[string]indexEntry
 	Root       string
 	executable string
 }
@@ -97,6 +100,13 @@ func (s *Store) directory(id string) (string, error) {
 	}
 	path := filepath.Join(s.Root, id)
 	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		path, err = s.tombstonePath(id, false)
+		if err != nil {
+			return "", err
+		}
+		info, err = os.Lstat(path)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -196,7 +206,7 @@ func (s *Store) Start(ctx context.Context, requestID string, spec Spec, env []st
 		Env  []string
 	}{spec, environment})
 	dir := filepath.Join(s.Root, id)
-	if _, err := os.Lstat(dir); err == nil {
+	if _, err := s.directory(id); err == nil {
 		old, err := s.Status(id)
 		if err != nil {
 			return Record{}, err
@@ -211,20 +221,26 @@ func (s *Store) Start(ctx context.Context, requestID string, spec Spec, env []st
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return Record{}, err
 	}
-	records, err := s.records()
+	records, err := s.index()
 	if err != nil {
 		return Record{}, err
 	}
 	active := 0
 	for _, r := range records {
-		if !r.Terminal() && !r.Archived {
+		if !r.Terminal && !r.Archived {
 			active++
 		}
 	}
 	if active >= MaxRunning {
 		return Record{}, errors.New("managed job concurrency limit reached; inspect existing jobs")
 	}
-	if len(records) >= 10000 {
+	history := 0
+	for _, r := range records {
+		if !r.Archived {
+			history++
+		}
+	}
+	if history >= 10000 {
 		return Record{}, errors.New("job history limit reached; administrative retention required")
 	}
 	// 完整的准入数据先写入不可见暂存目录，再原子发布；崩溃不留下半条公开记录。
@@ -309,63 +325,11 @@ func (s *Store) Status(id string) (Record, error) {
 	}
 	return r, nil
 }
-func (s *Store) records() ([]Record, error) {
-	file, err := os.Open(s.Root)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	entries, err := file.ReadDir(10016)
-	if err != nil && err != io.EOF {
-		return nil, err
-	}
-	if len(entries) >= 10016 {
-		return nil, errors.New("job registry directory exceeds bound")
-	}
-	result := []Record{}
-	for _, entry := range entries {
-		if !idPattern.MatchString(entry.Name()) {
-			continue
-		}
-		r, err := s.Status(entry.Name())
-		if err != nil {
-			// 隔离损坏项，其他任务仍可查询和提交。未知项保守占一个名额，且列表明确不完整。
-			r = Record{SchemaVersion: SchemaVersion, ID: entry.Name(), Status: "state_unavailable", StateUnavailable: true, Failure: "job_state_unreadable; inspect this receipt without replay", ObservationOnly: true}
-		}
-		result = append(result, r)
-	}
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].CreatedAt.Equal(result[j].CreatedAt) {
-			return result[i].ID < result[j].ID
-		}
-		return result[i].CreatedAt.After(result[j].CreatedAt)
-	})
-	return result, nil
-}
 func (s *Store) List(taskID string, limit int) ([]Record, bool, error) {
-	if limit < 1 || limit > 200 {
-		limit = 50
-	}
-	all, err := s.records()
-	if err != nil {
-		return nil, false, err
-	}
-	result := []Record{}
-	partial := false
-	for _, r := range all {
-		if r.StateUnavailable {
-			partial = true
-		}
-		if r.Archived || (taskID != "" && r.TaskID != taskID) {
-			continue
-		}
-		if len(result) >= limit {
-			return result, true, nil
-		}
-		result = append(result, r)
-	}
-	return result, partial, nil
+	page, err := s.ListPage(taskID, limit, "")
+	return page.Jobs, page.Partial || page.HasMore, err
 }
+
 func (s *Store) Cancel(id string) (Record, error) {
 	r, err := s.Status(id)
 	if err != nil || r.Terminal() {
@@ -405,6 +369,18 @@ func (s *Store) Archive(ctx context.Context, id string) (Record, error) {
 	// Keep the idempotency tombstone. Reusing a request ID must never rerun effects.
 	for _, name := range []string{"stdout.log", "stderr.log", "request.json", "validation.xml"} {
 		if err = os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return r, err
+		}
+	}
+	target, err := s.tombstonePath(id, true)
+	if err != nil {
+		return r, err
+	}
+	if dir != target {
+		if _, err := os.Lstat(target); !errors.Is(err, os.ErrNotExist) {
+			return r, errors.New("job tombstone destination already exists or is unreadable")
+		}
+		if err := os.Rename(dir, target); err != nil {
 			return r, err
 		}
 	}
@@ -456,6 +432,7 @@ func (s *Store) ReadLog(id, stream string, offset int64, maxBytes int) (LogChunk
 	chunk.Data = strings.ToValidUTF8(string(b[:n]), "�")
 	if chunk.Data != string(b[:n]) {
 		chunk.Encoding = "utf-8-lossy"
+		chunk.DataBase64 = base64.StdEncoding.EncodeToString(b[:n])
 	}
 	chunk.NextOffset = offset + int64(n)
 	return chunk, nil

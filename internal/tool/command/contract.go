@@ -32,23 +32,36 @@ func InputSchema(name string) (map[string]any, bool) {
 		props["task_id"] = stringProp("Optional task associated with a managed execution.")
 		props["title"] = stringProp("Short managed-job label, not a command dump.")
 		props["yield_time_ms"] = boundedIntProp("Foreground wait threshold for execution_mode=auto. Defaults to 5000 and is capped at 30000 milliseconds.", 0, 30000)
-		props["max_output_bytes"] = boundedIntProp("Maximum output bytes. Defaults to 65536 and is capped at 4194304.", 1, MaxOutputBytes)
+		props["max_output_bytes"] = boundedIntProp("Combined stdout/stderr raw-byte budget. Defaults to 65536; capped at 4194304.", 1, MaxOutputBytes)
 		props["stdin"] = stringProp("Initial stdin.")
 		props["tty"] = boolProp("Keep stdin open.")
 		required = []string{"cmd"}
 	case ToolSessionObserve:
+		props["stdout_offset"] = toolcontract.BoundedInteger64("Independent absolute stdout byte offset from stdout_next_offset. Omit to read from retained start.", 0, 9223372036854775807)
+		props["stderr_offset"] = toolcontract.BoundedInteger64("Independent absolute stderr byte offset from stderr_next_offset. Reads never consume another observer output.", 0, 9223372036854775807)
 		props["action"] = map[string]any{"type": "string", "description": "Read-only session action.", "enum": []string{"list", "status"}}
 		props["session_id"] = stringProp("Session id returned by exec_command, required for status.")
-		props["max_output_bytes"] = boundedIntProp("Maximum output bytes. Defaults to 65536 and is capped at 4194304.", 1, MaxOutputBytes)
+		props["max_output_bytes"] = boundedIntProp("Combined stdout/stderr raw-byte budget. Defaults to 65536; capped at 4194304.", 1, MaxOutputBytes)
 	case ToolSessionAct:
 		props["action"] = map[string]any{"type": "string", "description": "Mutating session action.", "enum": []string{"write", "kill", "kill_all"}}
 		props["session_id"] = stringProp("Session id returned by exec_command, required for write/kill.")
 		props["chars"] = stringProp("Characters to write when action=write.")
-		props["max_output_bytes"] = boundedIntProp("Maximum output bytes. Defaults to 65536 and is capped at 4194304.", 1, MaxOutputBytes)
+		props["max_output_bytes"] = boundedIntProp("Combined stdout/stderr raw-byte budget. Defaults to 65536; capped at 4194304.", 1, MaxOutputBytes)
 	default:
 		return nil, false
 	}
-	return toolcontract.InputObject(props, required...), true
+	schema := toolcontract.InputObject(props, required...)
+	switch name {
+	case ToolExecCommand:
+		toolcontract.RequireWhen(schema, "execution_mode", "managed", "request_id")
+	case ToolSessionObserve:
+		toolcontract.RequireWhen(schema, "action", "status", "session_id")
+	case ToolSessionAct:
+		toolcontract.Require(schema, "action")
+		toolcontract.RequireWhen(schema, "action", "write", "session_id", "chars")
+		toolcontract.RequireWhen(schema, "action", "kill", "session_id")
+	}
+	return schema, true
 }
 
 func OutputSchema(name string) (map[string]any, bool) {
@@ -60,6 +73,8 @@ func OutputSchema(name string) (map[string]any, bool) {
 	boolProp := toolcontract.Boolean
 	arrayProp := toolcontract.ObjectArray
 	props := map[string]any{
+		"stdout_base64": stringProp("Exact raw bytes when UTF-8 text is lossy; offsets count original bytes."), "stderr_base64": stringProp("Exact raw stderr bytes when UTF-8 text is lossy."),
+		"stdout_offset": intProp("Returned absolute stdout offset."), "stderr_offset": intProp("Returned absolute stderr offset."), "stdout_next_offset": intProp("Next stdout byte offset; independent per observer."), "stderr_next_offset": intProp("Next stderr byte offset; independent per observer."),
 		"sessions":         arrayProp("Command session summaries returned by list or bulk session actions."),
 		"count":            intProp("Command session count when a list or bulk action returns multiple sessions."),
 		"session_id":       stringProp("Command session id."),
@@ -83,5 +98,12 @@ func OutputSchema(name string) (map[string]any, bool) {
 	default:
 		return nil, false
 	}
-	return toolcontract.OutputObject(props), true
+	schema := toolcontract.OutputObject(props)
+	switch name {
+	case ToolExecCommand:
+		toolcontract.Variants(schema, []string{"session_id", "status", "stdout", "stderr", "stdout_next_offset", "stderr_next_offset"}, []string{"job_id", "status", "job"})
+	default:
+		toolcontract.Variants(schema, []string{"sessions", "count"}, []string{"session_id", "status", "stdout", "stderr", "stdout_next_offset", "stderr_next_offset"})
+	}
+	return schema, true
 }

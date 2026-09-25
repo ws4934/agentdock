@@ -10,6 +10,7 @@ func managedInput(name string) (map[string]any, bool) {
 	switch name {
 	case "job_observe":
 		props = map[string]any{"action": map[string]any{"type": "string", "enum": []string{"status", "list", "logs", "evidence"}}, "job_id": str("Durable job receipt id."), "task_id": str("Filter job list by task id."), "stream": map[string]any{"type": "string", "enum": []string{"stdout", "stderr"}}, "offset": integer("Explicit byte offset. Reading never advances another observer's cursor.", 0, int(jobrunMaxLog)), "max_bytes": integer("Maximum log bytes returned.", 1, 256<<10), "limit": integer("Maximum records returned, with explicit truncation.", 1, 200)}
+		props["cursor"] = map[string]any{"type": "string", "maxLength": 2048, "description": "Opaque next_cursor from a prior list with the same task filter."}
 	case "job_control":
 		props = map[string]any{"action": map[string]any{"type": "string", "enum": []string{"cancel", "archive", "abandon"}}, "job_id": str("Cancel, archive, or explicitly abandon an unknown job only after its owned process group is proven gone. Never retries it or marks it successful.")}
 		required = []string{"action", "job_id"}
@@ -19,7 +20,21 @@ func managedInput(name string) (map[string]any, bool) {
 	default:
 		return nil, false
 	}
-	return toolcontract.InputObject(props, required...), true
+	schema := toolcontract.InputObject(props, required...)
+	switch name {
+	case "job_observe":
+		for _, a := range []string{"status", "evidence", "logs"} {
+			toolcontract.RequireWhen(schema, "action", a, "job_id")
+		}
+		toolcontract.RequireWhen(schema, "action", "logs", "stream")
+		toolcontract.AddConstraint(schema, map[string]any{"if": map[string]any{"not": map[string]any{"required": []string{"action"}}}, "then": map[string]any{"required": []string{"job_id"}}})
+	case "validation_run":
+		for _, a := range []string{"junit", "process"} {
+			toolcontract.RequireWhen(schema, "adapter", a, "argv")
+		}
+		props["argv"].(map[string]any)["minItems"] = 1
+	}
+	return schema, true
 }
 
 const jobrunMaxLog = 8 << 20
@@ -27,7 +42,9 @@ const jobrunMaxLog = 8 << 20
 func managedOutput(name string) (map[string]any, bool) {
 	switch name {
 	case "job_observe", "job_control", "validation_run":
-		return toolcontract.OutputObject(map[string]any{"job_id": toolcontract.String("Durable execution ID."), "status": toolcontract.String("Execution status, separate from validation evidence."), "job": toolcontract.OpenObject("Machine-generated execution receipt."), "jobs": toolcontract.ObjectArray("Job receipts."), "log": toolcontract.OpenObject("Log slice with independent offsets."), "evidence_freshness": toolcontract.String("current, stale, unproven or not_available; only computed for evidence reads.")}), true
+		schema := toolcontract.OutputObject(map[string]any{"job_id": toolcontract.String("Durable execution ID."), "status": toolcontract.String("Execution status, separate from validation evidence."), "job": toolcontract.OpenObject("Machine-generated execution receipt."), "jobs": toolcontract.ObjectArray("Job receipts."), "log": toolcontract.OpenObject("Log slice with independent offsets."), "evidence_freshness": toolcontract.String("current, stale, unproven or not_available; only computed for evidence reads.")})
+		toolcontract.Variants(schema, []string{"job_id", "status", "job"}, []string{"jobs", "count", "truncated"}, []string{"log", "observation_only"})
+		return schema, true
 	}
 	return nil, false
 }

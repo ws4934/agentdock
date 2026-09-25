@@ -18,12 +18,14 @@ type BatchReadRequest struct {
 	MaxTotalBytes int         `json:"max_total_bytes,omitempty"`
 }
 type ReadRange struct {
+	Cursor               string `json:"cursor,omitempty"`
 	Path                 string `json:"path"`
 	StartLine            int    `json:"start_line,omitempty"`
 	EndLine              int    `json:"end_line,omitempty"`
 	ExpectedReadRevision string `json:"expected_read_revision,omitempty"`
 }
 type readPlan struct {
+	cursor                  string
 	path, display, revision string
 	start, end              int
 	indexes                 []int
@@ -58,6 +60,9 @@ func (s *Service) ReadFiles(ctx context.Context, request BatchReadRequest) (Resu
 	blocks := make([]map[string]any, 0, len(request.Requests))
 	partial := false
 	for i, r := range request.Requests {
+		if r.Cursor != "" && (r.StartLine != 0 || r.EndLine != 0) {
+			return nil, toolError("INVALID_ARGUMENT", "cursor cannot be combined with line selection", "validation")
+		}
 		start := r.StartLine
 		if start == 0 {
 			start = 1
@@ -75,7 +80,7 @@ func (s *Service) ReadFiles(ctx context.Context, request BatchReadRequest) (Resu
 			partial = true
 			continue
 		}
-		plan = append(plan, readPlan{path: path, display: display, revision: r.ExpectedReadRevision, start: start, end: end, indexes: []int{i}})
+		plan = append(plan, readPlan{cursor: r.Cursor, path: path, display: display, revision: r.ExpectedReadRevision, start: start, end: end, indexes: []int{i}})
 	}
 	sort.SliceStable(plan, func(i, j int) bool {
 		a, b := plan[i], plan[j]
@@ -91,7 +96,7 @@ func (s *Service) ReadFiles(ctx context.Context, request BatchReadRequest) (Resu
 	for _, r := range plan {
 		if len(merged) > 0 {
 			last := &merged[len(merged)-1]
-			if last.path == r.path && last.revision == r.revision && r.start <= last.end+21 && max(last.end, r.end)-last.start < 400 {
+			if last.cursor == "" && r.cursor == "" && last.path == r.path && last.revision == r.revision && r.start <= last.end+21 && max(last.end, r.end)-last.start < 400 {
 				last.end = max(last.end, r.end)
 				last.indexes = append(last.indexes, r.indexes...)
 				continue
@@ -158,7 +163,19 @@ func (s *Service) ReadFiles(ctx context.Context, request BatchReadRequest) (Resu
 			partial = true
 			continue
 		}
-		content, meta := sliceText(string(data), r.start, r.end, budget)
+		content, meta, pageErr := readTextPage(data, revision, r.start, r.end, budget, r.cursor)
+		if pageErr != nil {
+			block["error"] = pageErr.Error()
+			blocks = append(blocks, block)
+			partial = true
+			continue
+		}
+		if meta.RangeEndLine-meta.Start >= 400 {
+			block["error"] = "CURSOR_RANGE_TOO_LARGE: this cursor spans more than 400 remaining lines; continue through read_file"
+			blocks = append(blocks, block)
+			partial = true
+			continue
+		}
 		block["content"] = content
 		block["start_line"] = meta.Start
 		block["end_line"] = meta.End
@@ -167,6 +184,8 @@ func (s *Service) ReadFiles(ctx context.Context, request BatchReadRequest) (Resu
 		block["truncated"] = meta.Truncated
 		if meta.NextStartLine > 0 {
 			block["next_start_line"] = meta.NextStartLine
+			block["next_start_byte"] = meta.NextStartByte
+			block["next_cursor"] = meta.NextCursor
 		}
 		if meta.TruncatedReason != "" {
 			block["truncated_reason"] = meta.TruncatedReason

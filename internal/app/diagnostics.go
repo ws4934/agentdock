@@ -29,6 +29,11 @@ func diagnosticsContract(name string, _ config.Config) (ToolContract, bool) {
 	}
 	in := toolcontract.InputObject(map[string]any{"probe_public": toolcontract.Boolean("Explicitly probe only the configured HTTPS public health URL, without credentials or redirects. Defaults to false.")})
 	out := toolcontract.OutputObject(map[string]any{"diagnostics": toolcontract.OpenObject("Allowlisted build, readiness and trace metadata; never includes arguments, output bodies, environment or credentials."), "artifact_id": toolcontract.String("Private support bundle artifact ID."), "resource_uri": toolcontract.String("Resource link for the authorized MCP host."), "filename": toolcontract.String("Support bundle filename."), "mime_type": toolcontract.String("Support bundle media type.")})
+	if name == "runtime_diagnostics" {
+		toolcontract.Require(out, "diagnostics")
+	} else {
+		toolcontract.Require(out, "artifact_id", "resource_uri", "filename", "mime_type")
+	}
 	return ToolContract{InputSchema: in, OutputSchema: out}, true
 }
 func diagnosticsToolSpecs() []ToolSpec {

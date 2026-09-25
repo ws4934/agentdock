@@ -214,8 +214,8 @@ func TestListSessionsKeepsCompletedResultAvailable(t *testing.T) {
 	if result["status"] != "exited" || result["stdout"] != "completed-output" {
 		t.Fatalf("completed result = %#v", result)
 	}
-	if _, ok := runtime.sessions.Get(sessionID); ok {
-		t.Fatal("session remained stored after final result was consumed")
+	if _, ok := runtime.sessions.Get(sessionID); !ok {
+		t.Fatal("terminal receipt was removed before its retention deadline")
 	}
 }
 
@@ -315,8 +315,8 @@ func TestKillSessionWaitsForProcessExit(t *testing.T) {
 	if _, ok := result["exit_code"]; !ok {
 		t.Fatalf("kill result missing exit_code: %#v", result)
 	}
-	if _, ok := runtime.sessions.Get(sessionID); ok {
-		t.Fatal("killed session remained stored")
+	if _, ok := runtime.sessions.Get(sessionID); !ok {
+		t.Fatal("terminal receipt was removed before its retention deadline")
 	}
 }
 
@@ -370,8 +370,8 @@ func TestKillAllSessionsWaitsForEveryProcess(t *testing.T) {
 		default:
 			t.Fatalf("session %s still running after kill_all", stored.ID)
 		}
-		if _, ok := runtime.sessions.Get(stored.ID); ok {
-			t.Fatalf("session %s remained stored after kill_all", stored.ID)
+		if _, ok := runtime.sessions.Get(stored.ID); !ok {
+			t.Fatalf("terminal receipt %s was removed after kill_all", stored.ID)
 		}
 	}
 }
@@ -405,8 +405,8 @@ func TestSessionActWriteAfterCompletionReturnsFinalOutput(t *testing.T) {
 	if result["status"] != "exited" || result["stdout"] != "final-output" {
 		t.Fatalf("final result = %#v", result)
 	}
-	if _, ok := runtime.sessions.Get(sessionID); ok {
-		t.Fatal("completed session remained stored")
+	if _, ok := runtime.sessions.Get(sessionID); !ok {
+		t.Fatal("terminal receipt was removed before its retention deadline")
 	}
 }
 
@@ -434,16 +434,18 @@ func TestSessionActWritesInputAndReturnsFinalOutput(t *testing.T) {
 	}
 
 	var stdout strings.Builder
-	// writeStdin 在会话仍运行时返回 Peek 预览，不推进输出游标。
+	offset := int64(0)
+	// 写入后的快照和状态读取都不消费结果；增量由本观察者保存字节游标。
 	// 只有它已经直接返回最终结果时才消费这段输出，否则交给 sessionStatus 读取，避免重复累计。
 	if result["status"] == "exited" {
 		if value, _ := result["stdout"].(string); value != "" {
 			stdout.WriteString(value)
+			offset = result["stdout_next_offset"].(int64)
 		}
 	}
 	deadline := time.Now().Add(time.Second)
 	for result["status"] != "exited" && time.Now().Before(deadline) {
-		result, err = runtime.sessionStatusArgs(map[string]any{"session_id": sessionID})
+		result, err = runtime.sessionStatusArgs(map[string]any{"session_id": sessionID, "stdout_offset": offset, "stderr_offset": 0})
 		if err != nil {
 			if !strings.Contains(err.Error(), "session not found") {
 				t.Fatalf("sessionStatus() error = %v", err)
@@ -453,6 +455,7 @@ func TestSessionActWritesInputAndReturnsFinalOutput(t *testing.T) {
 		}
 		if value, _ := result["stdout"].(string); value != "" {
 			stdout.WriteString(value)
+			offset = result["stdout_next_offset"].(int64)
 		}
 		if result["status"] != "exited" {
 			time.Sleep(10 * time.Millisecond)

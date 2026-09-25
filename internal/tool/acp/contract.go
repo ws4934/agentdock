@@ -64,7 +64,18 @@ func InputSchema(name string) (map[string]any, bool) {
 	default:
 		return nil, false
 	}
-	return toolcontract.InputObject(props, required...), true
+	schema := toolcontract.InputObject(props, required...)
+	switch name {
+	case ToolSession:
+		toolcontract.RequireWhen(schema, "action", "update", "session_id")
+		toolcontract.RequireWhen(schema, "action", "close", "session_id")
+	case ToolPrompt:
+		toolcontract.RequireWhen(schema, "action", "start", "session_id", "prompt")
+		toolcontract.RequireWhen(schema, "action", "events", "run_id")
+	case ToolInteraction:
+		toolcontract.RequireWhen(schema, "action", "respond", "interaction_id", "response")
+	}
+	return schema, true
 }
 
 func OutputSchema(name string) (map[string]any, bool) {
@@ -137,5 +148,18 @@ func OutputSchema(name string) (map[string]any, bool) {
 	default:
 		return nil, false
 	}
-	return toolcontract.OutputObject(props), true
+	schema := toolcontract.OutputObject(props, "action", "profile_id")
+	switch name {
+	case ToolSession:
+		toolcontract.RequireWhen(schema, "action", "info", "agent", "protocol_version")
+		toolcontract.RequireWhen(schema, "action", "list", "sessions", "count")
+		toolcontract.RequireWhen(schema, "action", "new", "session")
+	case ToolPrompt:
+		toolcontract.RequireWhen(schema, "action", "start", "run_id", "session_id", "status")
+		toolcontract.RequireWhen(schema, "action", "events", "run_id", "events", "next_seq", "has_more")
+	case ToolInteraction:
+		toolcontract.RequireWhen(schema, "action", "list", "interactions", "count")
+		toolcontract.RequireWhen(schema, "action", "respond", "interaction")
+	}
+	return schema, true
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/santhosh-tekuri/jsonschema/v6/kind"
@@ -58,6 +59,9 @@ func CompileInputSchema(raw map[string]any) (*InputValidator, error) {
 }
 
 func (v *InputValidator) Validate(arguments map[string]any) error {
+	return v.ValidateValue(arguments, 1<<20)
+}
+func (v *InputValidator) ValidateValue(arguments any, maxBytes int) error {
 	if v == nil || v.schema == nil {
 		return fmt.Errorf("input validator is not initialized")
 	}
@@ -71,6 +75,9 @@ func (v *InputValidator) Validate(arguments map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("encode tool arguments: %w", err)
 	}
+	if maxBytes > 0 && len(raw) > maxBytes {
+		return fmt.Errorf("tool JSON exceeds %d byte budget", maxBytes)
+	}
 	var normalized any
 	if err := json.Unmarshal(raw, &normalized); err != nil {
 		return fmt.Errorf("decode tool arguments: %w", err)
@@ -79,6 +86,17 @@ func (v *InputValidator) Validate(arguments map[string]any) error {
 }
 
 func CompactValidationError(err error) string {
+	text := compactValidationError(err)
+	if len(text) > 1024 {
+		text = text[:1024]
+		for !utf8.ValidString(text) {
+			text = text[:len(text)-1]
+		}
+		text += "..."
+	}
+	return text
+}
+func compactValidationError(err error) string {
 	var validationErr *jsonschema.ValidationError
 	if !errors.As(err, &validationErr) {
 		return strings.Join(strings.Fields(err.Error()), " ")

@@ -9,6 +9,10 @@ import (
 )
 
 type textMeta struct {
+	NextCursor      string `json:"next_cursor,omitempty"`
+	NextStartByte   int    `json:"next_start_byte,omitempty"`
+	NextByteOffset  int    `json:"-"`
+	RangeEndLine    int    `json:"-"`
 	Start           int    `json:"start_line"`
 	End             int    `json:"end_line"`
 	Total           int    `json:"total_lines"`
@@ -21,29 +25,54 @@ func sliceText(content string, startLine, endLine, maxBytes int) (string, textMe
 	if startLine < 1 {
 		startLine = 1
 	}
-	lines := strings.Split(content, "\n")
-	total := len(lines)
+	total := strings.Count(content, "\n") + 1
 	if endLine <= 0 || endLine > total {
 		endLine = total
 	}
 	if startLine > total {
 		return "", textMeta{Start: startLine, End: endLine, Total: total}
 	}
-	requested := strings.Join(lines[startLine-1:endLine], "\n")
-	selected := requested
-	meta := textMeta{Start: startLine, End: endLine, Total: total}
-	if maxBytes > 0 && len([]byte(requested)) > maxBytes {
-		truncated := textutil.SafeTruncateString(requested, maxBytes)
-		selected = truncated.Text
-		returnedLines := strings.Count(selected, "\n") + 1
-		if selected == "" {
-			returnedLines = 0
+	if endLine < startLine {
+		return "", textMeta{Start: startLine, End: endLine, Total: total, TruncatedReason: "invalid_range"}
+	}
+	start, stop := textRangeOffsets(content, startLine, endLine)
+	return pageTextOffsets(content, start, stop, maxBytes, total, endLine)
+}
+
+// 直接扫描行边界，不为整个大文件创建 strings.Split 的行数组。
+func textRangeOffsets(content string, startLine, endLine int) (int, int) {
+	start, stop := 0, len(content)
+	line := 1
+	for i := 0; i < len(content); i++ {
+		if content[i] != '\n' {
+			continue
 		}
-		meta.End = startLine + returnedLines - 1
-		if meta.End < startLine {
-			meta.End = startLine
+		if line == endLine {
+			stop = i
+			break
 		}
-		meta.NextStartLine = meta.End + 1
+		line++
+		if line == startLine {
+			start = i + 1
+		}
+	}
+	return start, stop
+}
+func pageTextOffsets(content string, start, stop, budget, total, endLine int) (string, textMeta) {
+	startLine := strings.Count(content[:start], "\n") + 1
+	selected := content[start:stop]
+	meta := textMeta{Start: startLine, End: endLine, Total: total, RangeEndLine: endLine}
+	if budget > 0 && len(selected) > budget {
+		selected = textutil.SafeTruncateString(selected, budget).Text
+		next := start + len(selected)
+		meta.NextByteOffset = next
+		meta.NextStartLine = strings.Count(content[:next], "\n") + 1
+		lastNL := strings.LastIndexByte(content[:next], '\n')
+		meta.NextStartByte = next - (lastNL + 1)
+		meta.End = startLine + strings.Count(selected, "\n")
+		if strings.HasSuffix(selected, "\n") {
+			meta.End--
+		}
 		meta.Truncated = true
 		meta.TruncatedReason = "max_bytes"
 	}

@@ -7,6 +7,7 @@ import (
 	mcpcontract "github.com/uvwt/agentdock-protocol/mcpcontract"
 	"github.com/uvwt/agentdock/internal/config"
 	toolcontract "github.com/uvwt/agentdock/internal/tool/contract"
+	"github.com/uvwt/agentdock/internal/toolcatalog"
 )
 
 type ToolHandler func(context.Context, *Runtime, map[string]any) (Result, error)
@@ -21,6 +22,7 @@ type ToolContractProvider func(string, config.Config) (ToolContract, bool)
 // ToolSpec 是工具公开注册的单一入口：描述、契约所有者、配置开关和 handler 在这里显式绑定。
 // Schema 字段细节由对应 capability package 或共享 mcpcontract 拥有，app 不再按名字二次寻找 owner。
 type ToolSpec struct {
+	Group                  string
 	Name                   string
 	Title                  string
 	Description            string
@@ -41,6 +43,7 @@ type ToolAnnotations struct {
 }
 
 type ToolDefinition struct {
+	Group                  string
 	Name                   string
 	Title                  string
 	Description            string
@@ -85,7 +88,7 @@ func (s ToolSpec) definition(cfg config.Config) ToolDefinition {
 		annotations = canonicalToolAnnotations(canonical)
 	}
 	return ToolDefinition{
-		Name:                   s.Name,
+		Group: s.Group, Name: s.Name,
 		Title:                  s.Title,
 		Description:            s.Description,
 		UIBinding:              toolUIBinding(s.Name),
@@ -114,6 +117,9 @@ func cloneToolAnnotations(value *ToolAnnotations) *ToolAnnotations {
 }
 
 func (s ToolSpec) available(cfg config.Config) bool {
+	if !toolcatalog.Enabled(s.Group, cfg.ToolGroups) {
+		return false
+	}
 	if s.Availability == nil {
 		return true
 	}
@@ -126,6 +132,9 @@ func toolSpecByName(name string) (ToolSpec, bool) {
 }
 
 func compileAvailableToolContracts(cfg config.Config) ([]string, map[string]*toolcontract.InputValidator, error) {
+	if err := toolcatalog.Validate(cfg.ToolGroups); err != nil {
+		return nil, nil, err
+	}
 	names := make([]string, 0, len(toolSpecs))
 	validators := make(map[string]*toolcontract.InputValidator, len(toolSpecs))
 	for _, spec := range toolSpecs {

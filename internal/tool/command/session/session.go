@@ -34,6 +34,7 @@ type ExecutionContext struct {
 }
 
 type Session struct {
+	onComplete func()
 	ID         string
 	Command    *exec.Cmd
 	Cancel     context.CancelFunc
@@ -55,40 +56,41 @@ type Session struct {
 	waitErr            error
 	stdout             bytes.Buffer
 	stderr             bytes.Buffer
-	stdoutTotalBytes   int
-	stderrTotalBytes   int
-	stdoutDroppedBytes int
-	stderrDroppedBytes int
-	stdoutCursor       int
-	stderrCursor       int
+	stdoutTotalBytes   int64
+	stderrTotalBytes   int64
+	stdoutDroppedBytes int64
+	stderrDroppedBytes int64
 }
 
 type Snapshot struct {
-	SessionID          string
-	Status             string
-	Stdout             string
-	Stderr             string
-	ElapsedMS          int64
-	TimedOut           bool
-	Terminal           string
-	StdoutOutputBytes  int
-	StderrOutputBytes  int
-	StdoutTotalBytes   int
-	StderrTotalBytes   int
-	StdoutDroppedBytes int
-	StderrDroppedBytes int
-	StdoutOmittedBytes int
-	StderrOmittedBytes int
-	StdoutOutputLines  int
-	StderrOutputLines  int
-	StdoutTruncated    bool
-	StderrTruncated    bool
-	Completed          bool
-	ExitCode           int
-	CommandOK          bool
-	Runtime            string
-	WSLDistribution    string
-	Workdir            string
+	StdoutBase64, StderrBase64                                     string
+	StdoutOffset, StderrOffset, StdoutNextOffset, StderrNextOffset int64
+	StdoutEncoding, StderrEncoding                                 string
+	SessionID                                                      string
+	Status                                                         string
+	Stdout                                                         string
+	Stderr                                                         string
+	ElapsedMS                                                      int64
+	TimedOut                                                       bool
+	Terminal                                                       string
+	StdoutOutputBytes                                              int
+	StderrOutputBytes                                              int
+	StdoutTotalBytes                                               int64
+	StderrTotalBytes                                               int64
+	StdoutDroppedBytes                                             int64
+	StderrDroppedBytes                                             int64
+	StdoutOmittedBytes                                             int
+	StderrOmittedBytes                                             int
+	StdoutOutputLines                                              int
+	StderrOutputLines                                              int
+	StdoutTruncated                                                bool
+	StderrTruncated                                                bool
+	Completed                                                      bool
+	ExitCode                                                       int
+	CommandOK                                                      bool
+	Runtime                                                        string
+	WSLDistribution                                                string
+	Workdir                                                        string
 }
 
 type Store struct {
@@ -230,9 +232,13 @@ func (s *Store) WaitForReservations(ctx context.Context) bool {
 
 func (s *Store) AddReserved(session *Session) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.releaseReservationLocked()
 	s.sessions[session.ID] = session
+	session.mu.Lock()
+	session.onComplete = func() { s.PruneCompletedBytes(64 << 20) }
+	session.mu.Unlock()
+	s.mu.Unlock()
+	s.PruneCompletedBytes(64 << 20)
 }
 
 func (s *Store) releaseReservationLocked() {
@@ -247,8 +253,12 @@ func (s *Store) releaseReservationLocked() {
 
 func (s *Store) Add(session *Session) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.sessions[session.ID] = session
+	session.mu.Lock()
+	session.onComplete = func() { s.PruneCompletedBytes(64 << 20) }
+	session.mu.Unlock()
+	s.mu.Unlock()
+	s.PruneCompletedBytes(64 << 20)
 }
 
 func (s *Store) Get(id string) (*Session, bool) {
@@ -458,8 +468,12 @@ func StartCommandWithTTY(ctx context.Context, build CommandFactory, timeout time
 		if cmdCtx.Err() == context.DeadlineExceeded {
 			s.TimedOut = true
 		}
+		after := s.onComplete
 		s.mu.Unlock()
 		close(s.Done)
+		if after != nil {
+			after()
+		}
 	}()
 	return s, status, nil
 }
@@ -502,47 +516,8 @@ func (s *Session) Kill() (bool, error) {
 }
 
 func (s *Session) Snapshot(status string, maxBytes int) Snapshot {
-	return s.snapshot(status, maxBytes, true)
-}
-
-// Peek returns the current unread output without advancing the observation cursors.
-// Mutation tools use it so a following status call still receives the output.
-func (s *Session) Peek(status string, maxBytes int) Snapshot {
-	return s.snapshot(status, maxBytes, false)
-}
-
-func (s *Session) snapshot(status string, maxBytes int, advance bool) Snapshot {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	stdoutFull := s.stdout.String()
-	stderrFull := s.stderr.String()
-	stdoutSegment := stdoutFull
-	stderrSegment := stderrFull
-	if s.stdoutCursor > 0 && s.stdoutCursor <= len(stdoutFull) {
-		stdoutSegment = stdoutFull[s.stdoutCursor:]
-	}
-	if s.stderrCursor > 0 && s.stderrCursor <= len(stderrFull) {
-		stderrSegment = stderrFull[s.stderrCursor:]
-	}
-	if advance {
-		s.stdoutCursor = len(stdoutFull)
-		s.stderrCursor = len(stderrFull)
-	}
-	stdout := trim(stdoutSegment, maxBytes)
-	stderr := trim(stderrSegment, maxBytes)
-	return Snapshot{
-		SessionID: s.ID, Status: status, Stdout: stdout, Stderr: stderr,
-		ElapsedMS: time.Since(s.StartedAt).Milliseconds(), TimedOut: s.TimedOut, Terminal: s.Terminal,
-		StdoutOutputBytes: len([]byte(stdout)), StderrOutputBytes: len([]byte(stderr)),
-		StdoutTotalBytes: s.stdoutTotalBytes, StderrTotalBytes: s.stderrTotalBytes,
-		StdoutDroppedBytes: s.stdoutDroppedBytes, StderrDroppedBytes: s.stderrDroppedBytes,
-		StdoutOmittedBytes: omittedBytes(stdoutSegment, maxBytes), StderrOmittedBytes: omittedBytes(stderrSegment, maxBytes),
-		StdoutOutputLines: countLines(stdout), StderrOutputLines: countLines(stderr),
-		StdoutTruncated: maxBytes > 0 && len([]byte(stdoutSegment)) > maxBytes,
-		StderrTruncated: maxBytes > 0 && len([]byte(stderrSegment)) > maxBytes,
-		Completed:       s.completed, ExitCode: s.exitCode, CommandOK: s.exitCode == 0 && !s.TimedOut,
-		Runtime: s.execution.Runtime, WSLDistribution: s.execution.Distribution, Workdir: s.execution.Workdir,
-	}
+	snapshot, _ := s.SnapshotAt(status, maxBytes, nil, nil)
+	return snapshot
 }
 
 type sessionOutputWriter struct {
@@ -561,15 +536,13 @@ func (w sessionOutputWriter) Write(data []byte) (int, error) {
 	}
 	n, err := dst.Write(data)
 	if w.stderr {
-		s.stderrTotalBytes += n
+		s.stderrTotalBytes += int64(n)
 		dropped := trimBuffer(dst, 4*1024*1024)
-		s.stderrDroppedBytes += dropped
-		s.stderrCursor = adjustCursorAfterDrop(s.stderrCursor, dropped)
+		s.stderrDroppedBytes += int64(dropped)
 	} else {
-		s.stdoutTotalBytes += n
+		s.stdoutTotalBytes += int64(n)
 		dropped := trimBuffer(dst, 4*1024*1024)
-		s.stdoutDroppedBytes += dropped
-		s.stdoutCursor = adjustCursorAfterDrop(s.stdoutCursor, dropped)
+		s.stdoutDroppedBytes += int64(dropped)
 	}
 	return n, err
 }
@@ -608,20 +581,43 @@ func trimBuffer(buf *bytes.Buffer, limit int) int {
 	return dropped
 }
 
-func adjustCursorAfterDrop(cursor, dropped int) int {
-	if dropped <= 0 {
-		return cursor
-	}
-	if cursor <= dropped {
-		return 0
-	}
-	return cursor - dropped
-}
-
 func newID() (string, error) {
 	raw := make([]byte, 12)
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
 	}
 	return "session-" + hex.EncodeToString(raw), nil
+}
+
+// 终态输出另有全局内存预算；只淘汰最旧的已结束会话，不终止活动命令。
+func (s *Store) PruneCompletedBytes(limit int64) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	type item struct {
+		id       string
+		finished time.Time
+		bytes    int64
+	}
+	completed := []item{}
+	total := int64(0)
+	for id, session := range s.sessions {
+		session.mu.Lock()
+		if session.completed {
+			n := int64(session.stdout.Len() + session.stderr.Len())
+			completed = append(completed, item{id, session.FinishedAt, n})
+			total += n
+		}
+		session.mu.Unlock()
+	}
+	sort.Slice(completed, func(i, j int) bool { return completed[i].finished.Before(completed[j].finished) })
+	removed := 0
+	for _, record := range completed {
+		if total <= limit {
+			break
+		}
+		delete(s.sessions, record.id)
+		total -= record.bytes
+		removed++
+	}
+	return removed
 }

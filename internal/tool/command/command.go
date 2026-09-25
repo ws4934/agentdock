@@ -143,6 +143,8 @@ func (svc *Service) Exec(ctx context.Context, request ExecRequest) (Result, erro
 		}
 	}
 
+	svc.storeReservedSession(s)
+	reservationActive = false
 	err = s.WaitError()
 	s.Cancel()
 	result := snapshotResult(s.Snapshot("exited", maxBytes))
@@ -199,7 +201,10 @@ func commandOutputLimit(requested *int) int {
 func snapshotResult(snapshot session.Snapshot) Result {
 	result := Result{
 		"session_id": snapshot.SessionID, "status": snapshot.Status,
-		"stdout": snapshot.Stdout, "stderr": snapshot.Stderr,
+		"stdout_offset": snapshot.StdoutOffset, "stderr_offset": snapshot.StderrOffset, "stdout_next_offset": snapshot.StdoutNextOffset, "stderr_next_offset": snapshot.StderrNextOffset,
+		"stdout_encoding": snapshot.StdoutEncoding, "stderr_encoding": snapshot.StderrEncoding,
+		"output_retention": "one_hour_or_capacity_eviction_or_core_exit; reads do not consume output",
+		"stdout":           snapshot.Stdout, "stderr": snapshot.Stderr,
 		"elapsed_ms": snapshot.ElapsedMS, "timed_out": snapshot.TimedOut, "terminal": snapshot.Terminal,
 		"stdout_output_bytes": snapshot.StdoutOutputBytes, "stderr_output_bytes": snapshot.StderrOutputBytes,
 		"stdout_total_bytes": snapshot.StdoutTotalBytes, "stderr_total_bytes": snapshot.StderrTotalBytes,
@@ -207,6 +212,12 @@ func snapshotResult(snapshot session.Snapshot) Result {
 		"stdout_omitted_bytes": snapshot.StdoutOmittedBytes, "stderr_omitted_bytes": snapshot.StderrOmittedBytes,
 		"stdout_output_lines": snapshot.StdoutOutputLines, "stderr_output_lines": snapshot.StderrOutputLines,
 		"stdout_truncated": snapshot.StdoutTruncated, "stderr_truncated": snapshot.StderrTruncated,
+	}
+	if snapshot.StdoutBase64 != "" {
+		result["stdout_base64"] = snapshot.StdoutBase64
+	}
+	if snapshot.StderrBase64 != "" {
+		result["stderr_base64"] = snapshot.StderrBase64
 	}
 	if snapshot.Completed {
 		result["exit_code"] = snapshot.ExitCode
@@ -246,7 +257,7 @@ func (svc *Service) writeStdin(request SessionActRequest) (Result, error) {
 	maxBytes := commandOutputLimit(request.MaxOutputBytes)
 	select {
 	case <-s.Done:
-		return svc.consumeCompletedSession(s, maxBytes), nil
+		return svc.completedSessionResult(s, maxBytes), nil
 	default:
 	}
 
@@ -254,7 +265,7 @@ func (svc *Service) writeStdin(request SessionActRequest) (Result, error) {
 		if err := s.Write(request.Chars); err != nil {
 			select {
 			case <-s.Done:
-				return svc.consumeCompletedSession(s, maxBytes), nil
+				return svc.completedSessionResult(s, maxBytes), nil
 			default:
 			}
 			if !errors.Is(err, io.ErrClosedPipe) && !errors.Is(err, os.ErrClosed) {
@@ -264,16 +275,15 @@ func (svc *Service) writeStdin(request SessionActRequest) (Result, error) {
 	}
 	select {
 	case <-s.Done:
-		return svc.consumeCompletedSession(s, maxBytes), nil
+		return svc.completedSessionResult(s, maxBytes), nil
 	default:
-		return snapshotResult(s.Peek("running", maxBytes)), nil
+		return snapshotResult(s.Snapshot("running", maxBytes)), nil
 	}
 }
 
-func (svc *Service) consumeCompletedSession(s *session.Session, maxBytes int) Result {
+func (svc *Service) completedSessionResult(s *session.Session, maxBytes int) Result {
 	err := s.WaitError()
 	s.Cancel()
-	svc.sessions.Delete(s.ID)
 	result := snapshotResult(s.Snapshot("exited", maxBytes))
 	if s.TimedOut {
 		result["status"] = "timeout"
@@ -292,7 +302,7 @@ func (svc *Service) killSession(request SessionActRequest) (Result, error) {
 	}
 	select {
 	case <-s.Done:
-		return svc.consumeCompletedSession(s, commandOutputLimit(request.MaxOutputBytes)), nil
+		return svc.completedSessionResult(s, commandOutputLimit(request.MaxOutputBytes)), nil
 	default:
 	}
 	_, killErr := s.Kill()
@@ -312,7 +322,6 @@ func (svc *Service) killSession(request SessionActRequest) (Result, error) {
 			map[string]any{"session_id": s.ID, "wait_ms": sessionKillWait.Milliseconds()},
 		)
 	}
-	svc.sessions.Delete(s.ID)
 	result := snapshotResult(s.Snapshot("killed", commandOutputLimit(request.MaxOutputBytes)))
 	if err := s.WaitError(); err != nil {
 		result["command_error"] = err.Error()
@@ -331,7 +340,6 @@ func (svc *Service) killAll() (Result, error) {
 		case <-s.Done:
 			summary := s.Summary()
 			s.Cancel()
-			svc.sessions.Delete(s.ID)
 			items = append(items, map[string]any{"session_id": s.ID, "status": summary.Status})
 		default:
 			_, killErr := s.Kill()
@@ -343,7 +351,6 @@ func (svc *Service) killAll() (Result, error) {
 	}
 	completed, timedOut := waitForSessionsCompletion(running, sessionKillWait)
 	for _, s := range completed {
-		svc.sessions.Delete(s.ID)
 		items = append(items, map[string]any{"session_id": s.ID, "status": "killed"})
 	}
 	if len(killFailures) > 0 {
@@ -403,29 +410,48 @@ func waitForSessionsCompletion(sessions []*session.Session, timeout time.Duratio
 }
 
 func (svc *Service) sessionStatus(request SessionObserveRequest) (Result, error) {
+	svc.sessions.PruneCompletedBefore(time.Now().Add(-completedSessionRetention))
+	svc.sessions.PruneCompletedBytes(64 << 20)
 	s, ok := svc.sessions.Get(request.SessionID)
 	if !ok {
-		return nil, toolError("SESSION_NOT_FOUND", "session not found", "not_found")
+		return nil, toolError("SESSION_NOT_FOUND", "session expired, evicted, or unavailable in this Core; never rerun a mutation to recover output", "not_found")
 	}
-	maxBytes := commandOutputLimit(request.MaxOutputBytes)
-	select {
-	case <-s.Done:
-		return svc.consumeCompletedSession(s, maxBytes), nil
-	default:
-		return snapshotResult(s.Snapshot("running", maxBytes)), nil
+	status := "running"
+	if s.Completed() {
+		status = "exited"
 	}
+	snap, err := s.SnapshotAt(status, commandOutputLimit(request.MaxOutputBytes), request.StdoutOffset, request.StderrOffset)
+	if err != nil {
+		var cursor *session.OutputCursorError
+		if errors.As(err, &cursor) {
+			return nil, toolErrorDetails("SESSION_OUTPUT_CURSOR", "requested output is no longer retained or the offset is invalid", "validation", map[string]any{"stream": cursor.Stream, "requested_offset": cursor.Requested, "retained_offset": cursor.Retained, "total_bytes": cursor.Total})
+		}
+		return nil, err
+	}
+	result := snapshotResult(snap)
+	if snap.Completed {
+		if snap.TimedOut {
+			result["status"] = "timeout"
+		}
+		if err := s.WaitError(); err != nil {
+			result["command_error"] = err.Error()
+		}
+	}
+	return result, nil
 }
 
 func (svc *Service) storeReservedSession(s *session.Session) {
 	svc.sessions.PruneCompletedBefore(time.Now().Add(-completedSessionRetention))
+	svc.sessions.PruneCompletedBytes(64 << 20)
 	svc.sessions.AddReserved(s)
 	svc.sessions.PruneCompletedToLimit(maxRetainedCommandSessions)
 }
 
 func (svc *Service) listSessions() (Result, error) {
 	// list 是只读观察入口，不能消费刚完成命令的最终输出。完成结果保留一小时，
-	// 由 status 正常读取后删除；无人领取的旧结果再在这里统一淘汰。
+	// 读取不删除回执；仅过期或容量上限淘汰旧结果。
 	svc.sessions.PruneCompletedBefore(time.Now().Add(-completedSessionRetention))
+	svc.sessions.PruneCompletedBytes(64 << 20)
 	items := make([]map[string]any, 0)
 	for _, s := range svc.sessions.List() {
 		summary := s.Summary()

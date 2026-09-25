@@ -8,6 +8,7 @@ type RuntimeOptions struct {
 
 // ReadRequest 是 read_file 进入文件核心后的稳定输入契约。
 type ReadRequest struct {
+	Cursor string `json:"cursor,omitempty"`
 	RuntimeOptions
 	Path                 string `json:"path"`
 	StartLine            *int   `json:"start_line,omitempty"`

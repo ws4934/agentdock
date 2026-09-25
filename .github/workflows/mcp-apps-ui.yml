@@ -3,9 +3,9 @@ name: MCP Apps UI
 on:
   push:
     branches: [main]
-    paths: ['internal/mcpapps/**', 'internal/mcp/**', 'internal/app/mcp_apps.go', 'internal/app/specs_work.go', 'internal/workresult/**', '.github/workflows/mcp-apps-ui.yml']
+    paths: ['internal/mcpapps/**', 'internal/mcp/**', 'internal/app/mcp_apps.go', 'internal/app/catalog.go', 'internal/app/descriptor.go', 'internal/toolcatalog/**', 'internal/config/**', 'internal/app/specs_work.go', 'internal/workresult/**', '.github/workflows/mcp-apps-ui.yml']
   pull_request:
-    paths: ['internal/mcpapps/**', 'internal/mcp/**', 'internal/app/mcp_apps.go', 'internal/app/specs_work.go', 'internal/workresult/**', '.github/workflows/mcp-apps-ui.yml']
+    paths: ['internal/mcpapps/**', 'internal/mcp/**', 'internal/app/mcp_apps.go', 'internal/app/catalog.go', 'internal/app/descriptor.go', 'internal/toolcatalog/**', 'internal/config/**', 'internal/app/specs_work.go', 'internal/workresult/**', '.github/workflows/mcp-apps-ui.yml']
 
 permissions:
   contents: read

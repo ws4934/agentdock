@@ -16,7 +16,7 @@ import (
 )
 
 type Manager struct {
-	registryMu sync.Mutex
+	registryMu contextMutex
 	closed     atomic.Bool
 	mu         sync.RWMutex
 	store      *store
@@ -26,7 +26,10 @@ type Manager struct {
 }
 
 type serverState struct {
-	mu            sync.Mutex
+	mu            contextMutex
+	lifeOnce      sync.Once
+	life          context.Context
+	stop          context.CancelFunc
 	client        protocolClient
 	tools         map[string]Tool
 	lastError     string
@@ -183,6 +186,11 @@ func (m *Manager) replaceRegistryLocked(servers map[string]ServerConfig) []*serv
 }
 
 func closeServerStates(states []*serverState) error {
+	for _, state := range states {
+		if state != nil {
+			state.retire()
+		}
+	}
 	var result error
 	for _, state := range states {
 		result = errors.Join(result, closeState(state))
@@ -191,19 +199,31 @@ func closeServerStates(states []*serverState) error {
 }
 
 func (m *Manager) syncRegistry() error {
-	m.registryMu.Lock()
-	defer m.registryMu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return m.syncRegistryContext(ctx)
+}
+func (m *Manager) syncRegistryContext(ctx context.Context) error {
+	if m.closed.Load() {
+		return newError("MCP_MANAGER_CLOSED", "dynamic MCP manager is closed", false, nil, nil)
+	}
+	if err := m.registryMu.LockContext(ctx); err != nil {
+		return err
+	}
 	if err := m.ensureOpenLocked(); err != nil {
+		m.registryMu.Unlock()
 		return err
 	}
 	servers, err := m.store.load()
 	if err != nil {
+		m.registryMu.Unlock()
 		return newError("MCP_REGISTRY_READ_FAILED", "read dynamic MCP registry", true, nil, err)
 	}
 	m.mu.Lock()
-	staleStates := m.replaceRegistryLocked(servers)
+	stale := m.replaceRegistryLocked(servers)
 	m.mu.Unlock()
-	return closeServerStates(staleStates)
+	m.registryMu.Unlock()
+	return closeServerStates(stale)
 }
 
 func (m *Manager) List() []ServerSummary {
@@ -250,10 +270,12 @@ func (m *Manager) Inspect(name string) (ServerConfig, ServerSummary, error) {
 }
 
 func (m *Manager) Refresh(ctx context.Context, name string) (ServerSummary, []ToolSummary, error) {
-	if err := m.syncRegistry(); err != nil {
+	ctx, stopRequest := context.WithTimeout(ctx, 5*time.Minute)
+	defer stopRequest()
+	if err := m.syncRegistryContext(ctx); err != nil {
 		return ServerSummary{}, nil, err
 	}
-	cfg, state, unlockState, err := m.lockServer(strings.TrimSpace(name))
+	cfg, state, ctx, unlockState, err := m.lockServerContext(ctx, strings.TrimSpace(name))
 	if err != nil {
 		return ServerSummary{}, nil, err
 	}
@@ -266,8 +288,6 @@ func (m *Manager) Refresh(ctx context.Context, name string) (ServerSummary, []To
 		recordStateError(state, err)
 		return ServerSummary{}, nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(cfg.TimeoutMS)*time.Millisecond)
-	defer cancel()
 	tools, err := refreshStateLocked(ctx, runtimeCfg, state)
 	summary := summaryForLocked(cfg, state)
 	if err != nil {
@@ -277,7 +297,9 @@ func (m *Manager) Refresh(ctx context.Context, name string) (ServerSummary, []To
 }
 
 func (m *Manager) Search(ctx context.Context, query, server string, limit int) ([]ToolSummary, error) {
-	if err := m.syncRegistry(); err != nil {
+	ctx, stopRequest := context.WithTimeout(ctx, 5*time.Minute)
+	defer stopRequest()
+	if err := m.syncRegistryContext(ctx); err != nil {
 		return nil, err
 	}
 	query = strings.ToLower(strings.TrimSpace(query))
@@ -341,7 +363,9 @@ func (m *Manager) Search(ctx context.Context, query, server string, limit int) (
 }
 
 func (m *Manager) InspectTool(ctx context.Context, qualifiedName string) (string, Tool, error) {
-	if err := m.syncRegistry(); err != nil {
+	ctx, stopRequest := context.WithTimeout(ctx, 5*time.Minute)
+	defer stopRequest()
+	if err := m.syncRegistryContext(ctx); err != nil {
 		return "", Tool{}, err
 	}
 	server, name, err := splitQualifiedToolName(qualifiedName)
@@ -360,14 +384,16 @@ func (m *Manager) InspectTool(ctx context.Context, qualifiedName string) (string
 }
 
 func (m *Manager) Call(ctx context.Context, qualifiedName string, arguments map[string]any) (map[string]any, error) {
-	if err := m.syncRegistry(); err != nil {
+	ctx, stopRequest := context.WithTimeout(ctx, 5*time.Minute)
+	defer stopRequest()
+	if err := m.syncRegistryContext(ctx); err != nil {
 		return nil, err
 	}
 	server, name, err := splitQualifiedToolName(qualifiedName)
 	if err != nil {
 		return nil, newError("MCP_TOOL_NAME_INVALID", err.Error(), false, map[string]any{"tool": qualifiedName}, err)
 	}
-	cfg, state, unlockState, err := m.lockServer(server)
+	cfg, state, ctx, unlockState, err := m.lockServerContext(ctx, server)
 	if err != nil {
 		return nil, err
 	}
@@ -375,8 +401,6 @@ func (m *Manager) Call(ctx context.Context, qualifiedName string, arguments map[
 	if !cfg.Enabled {
 		return nil, newError("MCP_SERVER_DISABLED", "dynamic MCP server is disabled", false, map[string]any{"server": server}, nil)
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(cfg.TimeoutMS)*time.Millisecond)
-	defer cancel()
 	if state.client == nil || len(state.tools) == 0 {
 		runtimeCfg, err := m.runtimeConfig(cfg)
 		if err != nil {
@@ -422,24 +446,43 @@ func (m *Manager) Close() error {
 	return result
 }
 
-func (m *Manager) lockServer(name string) (ServerConfig, *serverState, func(), error) {
-	if m.closed.Load() {
-		return ServerConfig{}, nil, nil, newError("MCP_MANAGER_CLOSED", "dynamic MCP manager is closed", false, nil, nil)
+func (m *Manager) lockServerContext(ctx context.Context, name string) (ServerConfig, *serverState, context.Context, func(), error) {
+	if err := ctx.Err(); err != nil {
+		return ServerConfig{}, nil, ctx, nil, err
 	}
 	m.mu.RLock()
 	cfg, exists := m.servers[name]
 	state := m.states[name]
-	if !exists {
-		m.mu.RUnlock()
-		return ServerConfig{}, nil, nil, newError("MCP_SERVER_NOT_FOUND", "dynamic MCP server not found", false, map[string]any{"server": name}, nil)
-	}
-	state.mu.Lock()
 	m.mu.RUnlock()
 	if m.closed.Load() {
-		state.mu.Unlock()
-		return ServerConfig{}, nil, nil, newError("MCP_MANAGER_CLOSED", "dynamic MCP manager is closed", false, nil, nil)
+		return ServerConfig{}, nil, ctx, nil, newError("MCP_MANAGER_CLOSED", "dynamic MCP manager is closed", false, nil, nil)
 	}
-	return cfg, state, state.mu.Unlock, nil
+	if !exists || state == nil {
+		return ServerConfig{}, nil, ctx, nil, newError("MCP_SERVER_NOT_FOUND", "dynamic MCP server not found", false, map[string]any{"server": name}, nil)
+	}
+	timeout := time.Duration(cfg.TimeoutMS) * time.Millisecond
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	operation, cancel := context.WithTimeout(ctx, timeout)
+	stop := context.AfterFunc(state.lifetime(), cancel)
+	releaseContext := func() { stop(); cancel() }
+	if err := state.mu.LockContext(operation); err != nil {
+		if m.closed.Load() {
+			err = newError("MCP_MANAGER_CLOSED", "dynamic MCP manager is closed", false, nil, err)
+		}
+		releaseContext()
+		return ServerConfig{}, nil, ctx, nil, err
+	}
+	m.mu.RLock()
+	current := m.states[name] == state
+	m.mu.RUnlock()
+	if m.closed.Load() || !current || state.lifetime().Err() != nil {
+		state.mu.Unlock()
+		releaseContext()
+		return ServerConfig{}, nil, ctx, nil, newError("MCP_MANAGER_CLOSED", "dynamic MCP state was closed or replaced", false, nil, nil)
+	}
+	return cfg, state, operation, func() { state.mu.Unlock(); releaseContext() }, nil
 }
 
 func (m *Manager) ensureOpenLocked() error {
@@ -488,7 +531,7 @@ func (m *Manager) searchServers(name string) ([]ServerConfig, error) {
 }
 
 func (m *Manager) ensureTools(ctx context.Context, name string) (map[string]Tool, error) {
-	cfg, state, unlockState, err := m.lockServer(name)
+	cfg, state, ctx, unlockState, err := m.lockServerContext(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -496,8 +539,6 @@ func (m *Manager) ensureTools(ctx context.Context, name string) (map[string]Tool
 	if !cfg.Enabled {
 		return nil, newError("MCP_SERVER_DISABLED", "dynamic MCP server is disabled", false, map[string]any{"server": name}, nil)
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(cfg.TimeoutMS)*time.Millisecond)
-	defer cancel()
 	if state.client == nil || len(state.tools) == 0 {
 		runtimeCfg, err := m.runtimeConfig(cfg)
 		if err != nil {
@@ -588,7 +629,12 @@ func closeState(state *serverState) error {
 	if state == nil {
 		return nil
 	}
-	state.mu.Lock()
+	state.retire()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := state.mu.LockContext(ctx); err != nil {
+		return err
+	}
 	defer state.mu.Unlock()
 	var err error
 	if state.client != nil {
@@ -603,7 +649,9 @@ func closeState(state *serverState) error {
 }
 
 func summaryFor(cfg ServerConfig, state *serverState) ServerSummary {
-	state.mu.Lock()
+	if !state.mu.TryLock() {
+		return ServerSummary{Name: cfg.Name, Description: cfg.Description, Transport: cfg.Transport, Enabled: cfg.Enabled, Status: "busy"}
+	}
 	defer state.mu.Unlock()
 	return summaryForLocked(cfg, state)
 }

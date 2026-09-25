@@ -60,7 +60,7 @@ func ToolOutputSchema() map[string]any {
 		"changed":          boolProp("Whether durable evolution state changed."),
 		"idempotent":       boolProp("Whether the request resolved to already-applied state."),
 		"message":          stringProp("Short non-sensitive result explanation."),
-	})
+	}, "intent", "evolution_id", "status", "revision")
 }
 
 func InputSchema(name string) (map[string]any, bool) {

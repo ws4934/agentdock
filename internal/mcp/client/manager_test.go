@@ -427,7 +427,7 @@ func TestManagerStatePinBlocksDisableUntilOperationFinishes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, unlockState, err := manager.lockServer("demo")
+	_, _, _, unlockState, err := manager.lockServerContext(t.Context(), "demo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -498,7 +498,7 @@ func TestLockServerRejectsCloseRace(t *testing.T) {
 	state.mu.Lock()
 	lockResult := make(chan error, 1)
 	go func() {
-		_, _, unlock, err := manager.lockServer("demo")
+		_, _, _, unlock, err := manager.lockServerContext(t.Context(), "demo")
 		if unlock != nil {
 			unlock()
 		}

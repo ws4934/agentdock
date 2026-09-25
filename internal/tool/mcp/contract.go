@@ -49,7 +49,18 @@ func InputSchema(name string) (map[string]any, bool) {
 	default:
 		return nil, false
 	}
-	return toolcontract.InputObject(props, required...), true
+	schema := toolcontract.InputObject(props, required...)
+	if name == ToolManage {
+		for _, a := range []string{"inspect", "add", "remove", "enable", "disable", "env_set", "env_unset", "env_list", "refresh"} {
+			toolcontract.RequireWhen(schema, "action", a, "name")
+		}
+		toolcontract.RequireWhen(schema, "action", "add", "transport")
+		toolcontract.RequireWhen(schema, "transport", "stdio", "command")
+		toolcontract.RequireWhen(schema, "transport", "streamable_http", "url")
+		toolcontract.RequireWhen(schema, "action", "env_set", "key", "value")
+		toolcontract.RequireWhen(schema, "action", "env_unset", "key")
+	}
+	return schema, true
 }
 
 func OutputSchema(name string) (map[string]any, bool) {
@@ -94,5 +105,25 @@ func OutputSchema(name string) (map[string]any, bool) {
 	default:
 		return nil, false
 	}
-	return toolcontract.OutputObject(props), true
+	schema := toolcontract.OutputObject(props)
+	switch name {
+	case ToolManage:
+		toolcontract.Require(schema, "action")
+		toolcontract.RequireWhen(schema, "action", "list", "servers", "count")
+		toolcontract.RequireWhen(schema, "action", "inspect", "config", "server")
+		for _, a := range []string{"add", "enable", "disable", "refresh"} {
+			toolcontract.RequireWhen(schema, "action", a, "server")
+		}
+		toolcontract.RequireWhen(schema, "action", "remove", "name", "removed")
+		toolcontract.RequireWhen(schema, "action", "env_set", "name", "key", "configured")
+		toolcontract.RequireWhen(schema, "action", "env_unset", "name", "key", "removed")
+		toolcontract.RequireWhen(schema, "action", "env_list", "name", "items", "count")
+	case ToolSearch:
+		toolcontract.Require(schema, "query", "tools", "count")
+	case ToolInspect:
+		toolcontract.Require(schema, "name", "server", "tool_name", "input_schema")
+	case ToolCall:
+		toolcontract.Require(schema, "name", "result")
+	}
+	return schema, true
 }

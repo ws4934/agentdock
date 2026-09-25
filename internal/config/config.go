@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/uvwt/agentdock/internal/fs/securepath"
+	"github.com/uvwt/agentdock/internal/toolcatalog"
 )
 
 const (
@@ -30,6 +31,9 @@ const (
 )
 
 type Config struct {
+	ToolGroups                   []string
+	ResultTextMode               string
+	MaxToolResultBytes           int
 	AgentDockHome                string
 	AgentDockDefaultDir          string
 	CommandEnvFromEnv            map[string]string
@@ -74,6 +78,11 @@ type ACPProfile struct {
 }
 
 func FromEnv() (Config, error) {
+	resultBudget, err := getenvInt("AGENTDOCK_MAX_TOOL_RESULT_BYTES", 16<<20)
+	if err != nil {
+		return Config{}, err
+	}
+
 	port, err := getenvInt("AGENTDOCK_PORT", 8765)
 	if err != nil {
 		return Config{}, err
@@ -145,6 +154,9 @@ func FromEnv() (Config, error) {
 		}
 	}
 	return Config{
+		ToolGroups:                   splitCommaSeparated(os.Getenv("AGENTDOCK_TOOL_GROUPS")),
+		ResultTextMode:               getenv("AGENTDOCK_RESULT_TEXT_MODE", "summary"),
+		MaxToolResultBytes:           resultBudget,
 		AgentDockHome:                strings.TrimSpace(os.Getenv("AGENTDOCK_HOME")),
 		AgentDockDefaultDir:          strings.TrimSpace(os.Getenv("AGENTDOCK_DEFAULT_DIR")),
 		CommandEnvFromEnv:            commandEnvFromEnv,
@@ -175,6 +187,22 @@ func FromEnv() (Config, error) {
 }
 
 func (c *Config) Normalize() error {
+	if err := toolcatalog.Validate(c.ToolGroups); err != nil {
+		return err
+	}
+	if c.ResultTextMode == "" {
+		c.ResultTextMode = "summary"
+	}
+	if c.ResultTextMode != "summary" && c.ResultTextMode != "json" {
+		return errors.New("AGENTDOCK_RESULT_TEXT_MODE must be summary or json")
+	}
+	if c.MaxToolResultBytes == 0 {
+		c.MaxToolResultBytes = 16 << 20
+	}
+	if c.MaxToolResultBytes < 4096 || c.MaxToolResultBytes > 32<<20 {
+		return errors.New("tool result budget must be 4096..33554432 bytes")
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("resolve user home for AgentDock directories: %w", err)

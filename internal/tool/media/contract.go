@@ -59,7 +59,11 @@ func InputSchema(name string) (map[string]any, bool) {
 	default:
 		return nil, false
 	}
-	return toolcontract.InputObject(props, required...), true
+	schema := toolcontract.InputObject(props, required...)
+	if name == ToolFilePublish {
+		toolcontract.Variants(schema, []string{"file"}, []string{"path"})
+	}
+	return schema, true
 }
 
 func OutputSchema(name string) (map[string]any, bool) {
@@ -93,5 +97,11 @@ func OutputSchema(name string) (map[string]any, bool) {
 	default:
 		return nil, false
 	}
-	return toolcontract.OutputObject(props), true
+	schema := toolcontract.OutputObject(props)
+	if name == ToolViewImage {
+		toolcontract.Require(schema, "source", "image")
+	} else {
+		toolcontract.Require(schema, "artifact_id", "resource_uri", "delivery", "resource_readable", "filename", "mime_type", "size_bytes", "sha256")
+	}
+	return schema, true
 }

@@ -72,6 +72,7 @@ type Record struct {
 func (r Record) Terminal() bool { return r.FinishedAt != nil && r.Status != "outcome_unknown" }
 
 type LogChunk struct {
+	DataBase64    string `json:"data_base64,omitempty"`
 	JobID         string `json:"job_id"`
 	Stream        string `json:"stream"`
 	Offset        int64  `json:"offset"`

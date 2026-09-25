@@ -7,7 +7,7 @@ import (
 	"github.com/uvwt/agentdock-protocol/mcpcontract"
 )
 
-func TestCanonicalToolDefinitionsMatchSharedContract(t *testing.T) {
+func TestCanonicalToolsPreserveSharedPropertiesAndLocalConstraints(t *testing.T) {
 	definitions := make(map[string]ToolDefinition, len(mcpcontract.ToolNames()))
 	for _, definition := range ToolDefinitions() {
 		if mcpcontract.IsCanonicalTool(definition.Name) {
@@ -29,9 +29,10 @@ func TestCanonicalToolDefinitionsMatchSharedContract(t *testing.T) {
 		}
 		var wantOutput map[string]any
 		if name == mcpcontract.ToolAgentDockContext {
-			wantOutput = mcpcontract.LocalAgentDockContextOutputSchema()
+			wantOutput = localContextSchema(mcpcontract.LocalAgentDockContextOutputSchema())
 		} else {
 			wantOutput, _ = mcpcontract.OutputSchema(name)
+			constrainSharedOutput(name, wantOutput)
 		}
 		if !reflect.DeepEqual(definition.OutputSchema, wantOutput) {
 			t.Fatalf("%s output schema drifted from shared contract", name)

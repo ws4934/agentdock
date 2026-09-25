@@ -37,6 +37,7 @@ func (s *Service) startManaged(ctx context.Context, r ExecRequest, inv commandIn
 }
 
 type JobObserveRequest struct {
+	Cursor   string `json:"cursor,omitempty"`
 	Action   string `json:"action,omitempty"`
 	JobID    string `json:"job_id,omitempty"`
 	TaskID   string `json:"task_id,omitempty"`
@@ -53,8 +54,8 @@ func (s *Service) ObserveJob(ctx context.Context, r JobObserveRequest) (Result, 
 	}
 	switch r.Action {
 	case "list":
-		records, partial, err := jobs.List(r.TaskID, r.Limit)
-		return Result{"jobs": records, "count": len(records), "truncated": partial, "observation_only": true}, err
+		page, err := jobs.ListPage(r.TaskID, r.Limit, r.Cursor)
+		return Result{"jobs": page.Jobs, "count": len(page.Jobs), "truncated": page.HasMore || page.Partial, "partial": page.Partial, "has_more": page.HasMore, "next_cursor": page.NextCursor, "observation_only": true}, err
 	case "logs":
 		chunk, err := jobs.ReadLog(r.JobID, r.Stream, r.Offset, r.MaxBytes)
 		return Result{"log": chunk, "observation_only": true}, err

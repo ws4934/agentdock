@@ -40,9 +40,9 @@
 - 独立 supervisor 使用现有进程组／Job Object 控制执行进程树。Core 正常关闭或提交进程退出，不自动取消显式 managed Job；machine reboot/supervisor 丢失不能伪造恢复，返回 `outcome_unknown`。
 - 持久化文件在 `<AGENTDOCK_HOME>/jobs`。环境值不落盘；私有请求文件会包含 argv/命令，**不要把凭据放进命令正文**。目录只允许当前操作系统用户访问。
 - 运行上限8个，单 Job 超时最多24小时，每个流保留前8 MiB。超过预算继续排空管道并报告 `dropped_bytes`，不让输出堵住子进程。
-- 日志返回 `offset`、`next_offset`、保留／总字节数与截断标志。游标是字节位置；无效 UTF-8 或跨字符切片以 `encoding=utf-8-lossy` 明确标注，原始保留文件不变。
+- 日志返回 `offset`、`next_offset`、保留／总字节数与截断标志。游标是字节位置；无效 UTF-8 或跨字符切片以 `encoding=utf-8-lossy` 明确标注，原始保留文件不变，`data_base64` 提供该片段精确原始字节。
 - 取消是请求，只有终态回执能证明结束；不按进程名广泛杀进程，不通过可能复用的 PID 恢复所有权。
-- 归档仅删除已确认结束且无所有者的日志／请求文件，保留幂等墓碑。上限10000条记录；没有自动重放、自动清除未知任务或主机重启后自动执行。
+- 归档仅删除已确认结束且无所有者的日志／请求文件，保留幂等墓碑。近期未归档历史上限10000条；归档记录原子移至 `jobs/tombstones/<两位分片>/<job_id>`，保留 request_id 墓碑但不再占用近期历史名额。没有自动重放、自动清除未知任务或主机重启后自动执行。
 - managed 不接受 PTY、stdin 或 WSL 定制执行上下文。交互任务继续使用现有会话接口。
 
 ### 崩溃与未知记录的恢复
@@ -54,6 +54,8 @@
 缺少旧进程身份的遗留记录不会被直接放行。第一次显式 `abandon` 保存 `recovery-observation.json` 并返回 `PROCESS_EXIT_UNPROVEN`，名额仍保留；只有用户自行安排系统重启，后续显式调用观察到不同启动代际，才可恢复。重复请求或仅重启 Core 都不能提供这项证据。没有稳定 OS 启动标识时继续拒绝。工具不自动重启主机。
 
 `abandoned` 表示放弃未知结果，不证明操作成功、测试通过或副作用被撤销；原请求键和证据仍保留，重用 request_id 不会执行第二次。受控进程组不是任意命令的安全沙箱，主动脱离该组的外部服务仍应独立管理。
+
+普通 Session 的 status 已改为非消费式读取：每个观察者维护 stdout_offset/stderr_offset，使用返回的 next offset 继续；重复游标可重读。同步、取消和已结束的回执也保留，直到一小时期限、128条容量或64 MiB已完成输出总预算触发淘汰。无效或已淘汰游标明确报错，不自动重跑。Job 的 list 使用 next_cursor 分页，归档身份不占用近期查询集合。
 
 ## 2. 结构化验证与源码新鲜度
 
@@ -83,6 +85,8 @@ JUnit 使用原生 `argv`，其中恰有一个 `{report}` 占位符，例如自�
 `read_files.requests` 最多16个，每段最多400行；相同文件、相同 revision、重叠或间距不超过20行的范围会合并，返回 `request_indexes`。默认总输出256 KiB、最多1 MiB；总读取预算128 MiB。逐项失败、编码限制、截断和继续行号明确返回。
 
 `search_and_read` 最多16个匹配，有界上下文，搜索结果与阅读块去重；搜索和读取不是原子事务，`read_revision` 只对应返回的源码，不声称早先搜索仍是同一瞬间。
+
+截断续读优先使用 `next_cursor`，游标同时绑定完整文件版本和行内字节位置；不要仅用下一行号继续，否则无法表示超长行的剩余部分。cursor 与显式起止行互斥，文件变化或跨路径复用会拒绝。
 
 `read_file` 和批量读取返回 `read_revision`，随后可传给 `file_edit.expected_read_revision`。覆盖移动还必须提供目标 revision；目标必须原本不存在时使用 `absent`。结构化多文件 patch 使用 `expected_revisions`，一旦要求护栏就必须为全部受影响路径提供预期状态；标准 unified diff 或 WSL 不支持该护栏时明确拒绝，不静默降级。备份恢复使用原子 no-replace，不能在 Lstat 后再覆盖 rename。失败回滚先撤回到私有目录再检查；并发写入和仍可能被外部文件描述符修改的撤回 inode 均保留，错误返回恢复路径。`.agentdock-rollback-*/withdrawn` 是失败现场的恢复文件，不自动删除；确认恢复后再由操作者清理。正常成功的编辑不会创建这类回滚保留文件。
 
@@ -148,6 +152,8 @@ macOS 主菜单新增“连接诊断”，通过经过认证的 loopback Runtime
 
 ## MCP 响应与客户端升级
 
-完整源码、日志、错误和分页/版本护栏保存在 `structuredContent`；`content` 的普通文本是最多 1024 字节的状态摘要，不再重复整份 pretty JSON。动态 MCP 的正文/图片/音频/资源在外层标准 `content` 中保留一次，`result.content_location=mcp.content` 标明位置，上游结构化结果和未知元数据保持原样。消费者必须读取结构化结果，不能把摘要当成文件全文；只消费文本的旧客户端需要适配这一明确的线协议投影。
+工具注册表新增能力 Group；通过 `tool_catalog` 查询精简分组目录，或使用 `agentdock tools --format mcp|openai` 导出接入配置。`AGENTDOCK_TOOL_GROUPS` 在启动时过滤发现和调用，core 保留；该过滤不是权限沙箱，也不改变当前连接中的工具集合。
 
-更新后刷新客户端工具定义，并新开会话核对 `work_result_show` 和 `job_control.abandon`。已有历史响应不会被改写。此次修改不等于已安装或已在真实 ChatGPT 宿主中验收。
+`AGENTDOCK_RESULT_TEXT_MODE=summary` 默认只在文本提供有界摘要，完整数据位于 structuredContent；`json` 显式给旧客户端提供完整 JSON 文本。动态 MCP content 只在外层保留一次，上游结果级 _meta 不进入模型可见内容。整体结果默认16 MiB，超额可保存结果通过私有资源交付，返回 RESULT_DEFERRED 而非截断成功，禁止因此重跑写操作。
+
+安装后刷新客户端工具定义，新开会话核对 tool_catalog、cursor 和独立输出 offset。历史响应不会被改写，当前安装版也不会因源码提交自动改变。详细配置与边界见 `docs/tool-contracts-and-groups.md`。

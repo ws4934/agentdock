@@ -80,7 +80,7 @@ func (c *sdkProtocolClient) transport() (mcpsdk.Transport, error) {
 		}
 		return &mcpsdk.StreamableClientTransport{
 			Endpoint:             c.cfg.URL,
-			HTTPClient:           &http.Client{Transport: headerRoundTripper{headers: headers}},
+			HTTPClient:           &http.Client{Transport: headerRoundTripper{headers: headers, origin: origin(c.cfg.URL)}, CheckRedirect: noRedirect},
 			MaxRetries:           -1,
 			DisableStandaloneSSE: true,
 		}, nil
@@ -120,7 +120,7 @@ func (c *sdkProtocolClient) startStdioTransport() (mcpsdk.Transport, error) {
 	}
 	c.command = cmd
 	c.controller = controller
-	return &mcpsdk.IOTransport{Reader: stdout, Writer: stdin}, nil
+	return &mcpsdk.IOTransport{Reader: &frameLimit{ReadCloser: stdout}, Writer: stdin}, nil
 }
 
 func (c *sdkProtocolClient) listTools(ctx context.Context) ([]Tool, error) {
@@ -128,6 +128,7 @@ func (c *sdkProtocolClient) listTools(ctx context.Context) ([]Tool, error) {
 		return nil, newError("MCP_CONNECTION_FAILED", "MCP session is not initialized", true, map[string]any{"server": c.cfg.Name}, nil)
 	}
 	tools := make([]Tool, 0)
+	catalogBytes := 0
 	for remote, err := range c.session.Tools(ctx, nil) {
 		if err != nil {
 			return nil, c.wrapSDKError("list MCP tools", err)
@@ -135,6 +136,14 @@ func (c *sdkProtocolClient) listTools(ctx context.Context) ([]Tool, error) {
 		tool, err := convertSDKTool(remote)
 		if err != nil {
 			return nil, newError("MCP_INVALID_RESPONSE", "decode MCP tool definition", false, map[string]any{"server": c.cfg.Name, "tool": remote.Name}, err)
+		}
+		encoded, encodeErr := json.Marshal(remote)
+		if encodeErr != nil {
+			return nil, encodeErr
+		}
+		catalogBytes += len(encoded)
+		if len(tools) >= maxRemoteTools || catalogBytes > maxRemoteCatalogBytes || len(encoded) > 256<<10 {
+			return nil, newError("MCP_CATALOG_TOO_LARGE", "upstream catalog exceeds tool/schema budget", false, nil, nil)
 		}
 		tools = append(tools, tool)
 	}
@@ -147,9 +156,26 @@ func (c *sdkProtocolClient) callTool(ctx context.Context, name string, arguments
 	}
 	result, err := c.session.CallTool(ctx, &mcpsdk.CallToolParams{Name: name, Arguments: arguments})
 	if err != nil {
-		return nil, c.wrapSDKError("call MCP tool", err)
+		wrapped := c.wrapSDKError("call MCP tool", err)
+		var failure *Error
+		if errors.As(wrapped, &failure) {
+			failure.Retryable = false
+			if failure.Details == nil {
+				failure.Details = map[string]any{}
+			}
+			failure.Details["execution_outcome"] = "unknown"
+			failure.Details["do_not_replay"] = true
+		}
+		return nil, wrapped
 	}
-	return jsonObject(result)
+	if result == nil {
+		return nil, newError("MCP_INVALID_RESPONSE", "upstream result missing; do not replay mutations", false, map[string]any{"do_not_replay": true}, nil)
+	}
+	// MCP result-level _meta is client-only. This bridge does not render the upstream
+	// app, and must not promote that private namespace into model-visible data.
+	public := *result
+	public.Meta = nil
+	return jsonObject(&public)
 }
 
 func (c *sdkProtocolClient) close() error {
@@ -304,10 +330,14 @@ func resolveHTTPHeaders(cfg ServerConfig) (http.Header, error) {
 }
 
 type headerRoundTripper struct {
+	origin  string
 	headers http.Header
 }
 
 func (t headerRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	if t.origin == "" || origin(request.URL.String()) != t.origin {
+		return nil, errors.New("MCP_ORIGIN_MISMATCH: credentials not forwarded")
+	}
 	clone := request.Clone(request.Context())
 	clone.Header = request.Header.Clone()
 	for name, values := range t.headers {
@@ -316,7 +346,16 @@ func (t headerRoundTripper) RoundTrip(request *http.Request) (*http.Response, er
 			clone.Header.Add(name, value)
 		}
 	}
-	return http.DefaultTransport.RoundTrip(clone)
+	response, err := http.DefaultTransport.RoundTrip(clone)
+	if err != nil {
+		return nil, err
+	}
+	if response.ContentLength > maxRemoteMessageBytes {
+		_ = response.Body.Close()
+		return nil, errors.New("MCP_RESPONSE_TOO_LARGE")
+	}
+	response.Body = &responseLimit{ReadCloser: response.Body, remaining: maxRemoteMessageBytes}
+	return response, nil
 }
 
 type tailBuffer struct {

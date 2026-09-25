@@ -46,9 +46,9 @@ internal/mcpapps/
 
 普通工具完整结果放在 `structuredContent`，包含原始源码/日志、完整错误、分页游标和读取版本；`content` 文本只提供最多 1024 字节的有界摘要。不能把摘要当作文件全文，也不能把进程未知或部分成功概括为成功。
 
-动态 MCP 的原始文本、图像、音频和资源在外层 `content` 返回一次，结构化 result 使用 `content_location=mcp.content` 指明位置。转换不修改上游对象，其他结构化内容和扩展元数据保留。显式读取旧动态视图资源时，归一化临时引用外层 content，不复制或长期保留它。
+动态 MCP 的原始文本、图像、音频和资源在外层 `content` 返回一次，结构化 result 使用 `content_location=mcp.content` 指明位置。转换不修改上游对象，其他公开结构化内容保留；上游结果级 `_meta` 不提升到模型可见数据，也不合并进本地 UI 元数据。显式读取旧动态视图资源时，归一化临时引用外层 content，不复制或长期保留它。
 
-SDK CallToolResult 的内容联合类型单独解码，不再将完整 structuredContent 额外序列化并解析一遍。消费方必须支持结构化结果；仅消费文本的旧集成需要适配这一线协议投影，而不是期待重复的 pretty JSON。
+SDK CallToolResult 的内容联合类型单独解码，不为 SDK 转换额外解析整个 structuredContent；最终线协议预算另对整体结果进行序列化计量。默认 summary 模式消费方需要读取结构化结果。仅文本集成可显式配置 `AGENTDOCK_RESULT_TEXT_MODE=json`，完整 JSON 文本仍受整体响应预算限制。
 
 ## 安全与外观
 
@@ -81,3 +81,9 @@ Chrome 测试使用独立临时用户目录和本机合成宿主，不接管用�
 
 - https://developers.openai.com/plugins/build/chatgpt-ui （Separate data processing from UI rendering）
 - https://apps.extensions.modelcontextprotocol.io/api/classes/app.App.html
+
+## 分组与整体预算
+
+工具元数据由 `internal/app/descriptor.go` 统一构建，MCP 服务和目录导出共用同一来源。`agentdock/group` 只表达分类，不自动创建 UI。新增 tool_catalog 无 UI，中间读取与展示仍然分离。
+
+`AGENTDOCK_MAX_TOOL_RESULT_BYTES` 默认16 MiB，覆盖数据、文本、图像和本地 UI 元数据。超限可保存结果以一小时私有不可变资源交付，外层标记 RESULT_DEFERRED 并禁止重放原工具；读取完整资源后才可判断原始结果。不得为了省体积把隐藏元数据搬进 structuredContent，也不能把部分结果误报为成功。

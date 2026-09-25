@@ -76,7 +76,11 @@ func InputSchema(name string) (map[string]any, bool) {
 	default:
 		return nil, false
 	}
-	return toolcontract.InputObject(props, required...), true
+	schema := toolcontract.InputObject(props, required...)
+	if name == ToolSession {
+		toolcontract.RequireWhen(schema, "action", "close", "session_id")
+	}
+	return schema, true
 }
 
 func OutputSchema(name string) (map[string]any, bool) {
@@ -120,7 +124,12 @@ func OutputSchema(name string) (map[string]any, bool) {
 	default:
 		return nil, false
 	}
-	return toolcontract.OutputObject(props), true
+	schema := toolcontract.OutputObject(props, "browser_ok")
+	toolcontract.RequireWhen(schema, "browser_ok", false, "error", "code")
+	if name == ToolAct || name == ToolSnapshot {
+		toolcontract.RequireWhen(schema, "browser_ok", true, "session_id", "page_id", "text", "screenshot")
+	}
+	return schema, true
 }
 
 func browserActionsSchema() map[string]any {

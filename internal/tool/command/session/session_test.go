@@ -56,7 +56,7 @@ func TestStartCapturesCompleteOutputAndExitState(t *testing.T) {
 	if result.ExitCode != 7 || result.CommandOK != false {
 		t.Fatalf("exit state = exit_code:%#v command_ok:%#v", result.ExitCode, result.CommandOK)
 	}
-	if result.StdoutTotalBytes != len("stdout-value") || result.StderrTotalBytes != len("stderr-value") {
+	if result.StdoutTotalBytes != int64(len("stdout-value")) || result.StderrTotalBytes != int64(len("stderr-value")) {
 		t.Fatalf("byte totals = stdout:%#v stderr:%#v", result.StdoutTotalBytes, result.StderrTotalBytes)
 	}
 }
@@ -85,7 +85,7 @@ func TestStartCapturesFastCommandOutputRepeatedly(t *testing.T) {
 		if result.Stdout != "fast-output" {
 			t.Fatalf("iteration %d stdout = %#v, want fast-output", iteration, result.Stdout)
 		}
-		if result.StdoutTotalBytes != len("fast-output") {
+		if result.StdoutTotalBytes != int64(len("fast-output")) {
 			t.Fatalf("iteration %d stdout_total_bytes = %#v", iteration, result.StdoutTotalBytes)
 		}
 		if result.CommandOK != true {
@@ -173,7 +173,7 @@ func TestStartRejectsNonPositiveTimeout(t *testing.T) {
 	}
 }
 
-func TestSnapshotReturnsOnlyNewOutput(t *testing.T) {
+func TestSnapshotDoesNotConsumeIndependentOutput(t *testing.T) {
 	s := &Session{ID: "test", StartedAt: time.Now(), exitCode: -1}
 	_, _ = s.stdout.WriteString("first\n")
 	first := s.Snapshot("running", 1024)
@@ -184,11 +184,14 @@ func TestSnapshotReturnsOnlyNewOutput(t *testing.T) {
 		t.Fatalf("first stdout = %#v", first.Stdout)
 	}
 	second := s.Snapshot("running", 1024)
-	if second.Stdout != "" {
-		t.Fatalf("second stdout = %#v, want empty delta", second.Stdout)
+	if second.Stdout != first.Stdout {
+		t.Fatalf("repeated snapshot changed stdout = %#v", second.Stdout)
 	}
 	_, _ = s.stdout.WriteString("second\n")
-	third := s.Snapshot("running", 1024)
+	third, err := s.SnapshotAt("running", 1024, &first.StdoutNextOffset, &first.StderrNextOffset)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if third.Stdout != "second\n" {
 		t.Fatalf("third stdout = %#v", third.Stdout)
 	}
@@ -301,7 +304,7 @@ func tail(value string, size int) string {
 func TestPeekDoesNotConsumeOutput(t *testing.T) {
 	s := &Session{ID: "test", StartedAt: time.Now(), exitCode: -1}
 	_, _ = s.stdout.WriteString("pending\n")
-	peeked := s.Peek("running", 1024)
+	peeked := s.Snapshot("running", 1024)
 	if peeked.Stdout != "pending\n" {
 		t.Fatalf("peek stdout = %#v", peeked.Stdout)
 	}

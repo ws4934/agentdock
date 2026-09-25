@@ -32,6 +32,7 @@ func (r *Runtime) agentDockContext(ctx context.Context, nexusLocalOnly bool) (Re
 		WorkflowTemplates: []capabilityTemplateItem{},
 		Rules: []string{
 			"需要真实执行命令或检查环境时，先用 exec_command 查看现状，再修改，修改后真实验证。",
+			"需要按能力查找工具时用 tool_catalog（默认紧凑摘要）；group 过滤不启用能力、不替代本机授权，已禁用工具不能通过命名空间绕过。长行续读使用 next_cursor；普通会话 stdout_offset/stderr_offset 独立维护，状态读取不消费结果。",
 			"需要跨 Core 重启保留的非交互长任务，可显式使用 exec_command execution_mode=managed 并提供稳定 request_id；断线后先用同一 request_id 找回回执或 job_observe，不能新建执行来猜测恢复。日志 offset 是调用方维护的字节位置，取消以终态回执为准。",
 			"验证优先使用 validation_run 的 go_test、JUnit 或 process 适配，并通过 job_observe action=evidence 检查源码新鲜度；进程退出成功不等于测试执行、覆盖充分或当前源码已验证。",
 			"多个源码范围可用 read_files；搜索后需要上下文时可用 search_and_read。修改应保留调用方要求的 expected_read_revision / expected_revisions；冲突后重新读取，不能删除护栏重试。",

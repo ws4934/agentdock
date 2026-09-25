@@ -15,6 +15,13 @@ import (
 )
 
 func (svc *Service) ReadFile(ctx context.Context, request ReadRequest) (Result, error) {
+	if err := validateReadRange(intValue(request.StartLine, 1), intValue(request.EndLine, 0)); err != nil {
+		return nil, err
+	}
+	if request.Cursor != "" && (request.StartLine != nil || request.EndLine != nil) {
+		return nil, toolError("INVALID_ARGUMENT", "cursor cannot be combined with line selection", "validation")
+	}
+
 	selection, err := selectFileRuntime(request.RuntimeOptions)
 	if err != nil {
 		return nil, err
@@ -23,7 +30,7 @@ func (svc *Service) ReadFile(ctx context.Context, request ReadRequest) (Result, 
 		return nil, toolError("INVALID_ARGUMENT", "path is required", "validation")
 	}
 	if selection.isWSL() {
-		if request.ExpectedReadRevision != "" {
+		if request.ExpectedReadRevision != "" || request.Cursor != "" {
 			return nil, toolError("REVISION_UNAVAILABLE", "WSL read revisions are not available; do not drop the requested guard", "validation")
 		}
 		return svc.readFileWSL(ctx, request, selection)
@@ -72,11 +79,17 @@ func (svc *Service) ReadFile(ctx context.Context, request ReadRequest) (Result, 
 		return nil, toolError("ENCODING_UNSUPPORTED", "file is not valid utf-8", "validation")
 	}
 	maxBytes := boundedInt(intValue(request.MaxBytes, 262144), 262144, 1, maxTextOutputBytes)
-	content, meta := sliceText(string(data), intValue(request.StartLine, 1), intValue(request.EndLine, 0), maxBytes)
+	revision := readRevision(absPath, data)
+	content, meta, err := readTextPage(data, revision, intValue(request.StartLine, 1), intValue(request.EndLine, 0), maxBytes, request.Cursor)
+	if err != nil {
+		return nil, err
+	}
 	result := Result{"path": displayPath, "content": content, "encoding": "utf-8", "size_bytes": len(data), "truncated": meta.Truncated, "start_line": meta.Start, "end_line": meta.End, "total_lines": meta.Total}
-	result["read_revision"] = readRevision(absPath, data)
+	result["read_revision"] = revision
 	if meta.NextStartLine > 0 {
 		result["next_start_line"] = meta.NextStartLine
+		result["next_start_byte"] = meta.NextStartByte
+		result["next_cursor"] = meta.NextCursor
 	}
 	if meta.TruncatedReason != "" {
 		result["truncated_reason"] = meta.TruncatedReason

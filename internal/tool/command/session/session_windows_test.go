@@ -172,13 +172,13 @@ func waitForWindowsNativeChild(t *testing.T, s *Session, readyPath string) windo
 		}
 		select {
 		case <-s.Done:
-			status := s.Peek("exited", 4096)
+			status := s.Snapshot("exited", 4096)
 			t.Fatalf("native child exited before readiness: stdout=%q stderr=%q command_error=%v", status.Stdout, status.Stderr, s.WaitError())
 		default:
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
-	status := s.Peek("running", 4096)
+	status := s.Snapshot("running", 4096)
 	t.Fatalf("native child did not start: stdout=%q stderr=%q", status.Stdout, status.Stderr)
 	return windowsNativeChildReady{}
 }

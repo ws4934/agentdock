@@ -71,6 +71,7 @@ func TestRuntimeSuccessOutputsValidateNewCapabilities(t *testing.T) {
 	}
 	call("read_files", map[string]any{"requests": []map[string]any{{"path": path, "start_line": 1, "end_line": 2}}})
 	call("search_and_read", map[string]any{"path": root, "query": "needle"})
+	call("tool_catalog", map[string]any{})
 	call("job_observe", map[string]any{"action": "list"})
 	call("code_navigate", map[string]any{"action": "status"})
 	call("worktree_manage", map[string]any{"action": "list"})

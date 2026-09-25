@@ -16,7 +16,7 @@ import (
 func TestWrapSDKErrorClassifiesTransportRejected(t *testing.T) {
 	client := &sdkProtocolClient{cfg: ServerConfig{Name: "demo"}}
 
-	err := client.wrapSDKError("call MCP tool", &sdkjsonrpc.Error{
+	err := client.wrapSDKError("initialize MCP session", &sdkjsonrpc.Error{
 		Code:    -32005,
 		Message: "rejected by transport",
 	})
@@ -136,8 +136,8 @@ func TestManagerTransportRejectedDoesNotPoisonServerStateOrRetryCall(t *testing.
 
 	_, err = manager.Call(context.Background(), "demo:echo", map[string]any{"text": "first"})
 	var mcpErr *Error
-	if !errors.As(err, &mcpErr) || mcpErr.Code != "MCP_TRANSPORT_REJECTED" || !mcpErr.Retryable {
-		t.Fatalf("first Call() error = %#v, want retryable MCP_TRANSPORT_REJECTED", err)
+	if !errors.As(err, &mcpErr) || mcpErr.Code != "MCP_TRANSPORT_REJECTED" || mcpErr.Retryable || mcpErr.Details["do_not_replay"] != true {
+		t.Fatalf("first Call() error = %#v, want non-replayable MCP_TRANSPORT_REJECTED", err)
 	}
 	if got := toolCallCount.Load(); got != 1 {
 		t.Fatalf("tools/call count after rejected request = %d, want 1", got)
