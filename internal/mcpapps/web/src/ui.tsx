@@ -1,11 +1,19 @@
 import { render, type ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
-import { type Group, type Locale, type Model, status, tr } from "./model";
+import {
+  type Data,
+  type Group,
+  type Locale,
+  type Model,
+  status,
+  tr,
+} from "./model";
 import { type Store, type Snapshot } from "./store";
 
 export interface Actions {
   reconnect(): void;
   open(url: string): Promise<void>;
+  refresh?(request: Data): Promise<void>;
 }
 function Rows({ group, locale }: { group: Group; locale: Locale }) {
   const [limit, setLimit] = useState(12);
@@ -104,7 +112,9 @@ function Card({
 }) {
   const [expanded, setExpanded] = useState(false),
     [selected, setSelected] = useState(""),
-    [linkError, setLinkError] = useState("");
+    [linkError, setLinkError] = useState(""),
+    [refreshing, setRefreshing] = useState(false),
+    [refreshError, setRefreshError] = useState("");
   const tabs = m.tabs ?? [],
     active = tabs.find((t) => t.id === selected) ?? tabs[0];
   const groups = active?.groups ?? m.groups ?? [];
@@ -141,6 +151,24 @@ function Card({
       );
     }
   }
+  async function refresh() {
+    if (!m.refresh || !actions.refresh || refreshing) return;
+    setRefreshing(true);
+    setRefreshError("");
+    try {
+      await actions.refresh(m.refresh);
+    } catch {
+      setRefreshError(
+        tr(
+          l,
+          "刷新失败，下方保留的是上次观察，不代表最新状态。",
+          "Refresh failed. The previous observation below is not current.",
+        ),
+      );
+    } finally {
+      setRefreshing(false);
+    }
+  }
   return (
     <article class="card" data-tone={m.tone ?? "neutral"} data-entity={m.id}>
       <header>
@@ -167,6 +195,24 @@ function Card({
         )}
       </header>
       <p class="summary">{m.summary}</p>
+      {m.refresh && actions.refresh && (
+        <button
+          class="text-button refresh-result"
+          disabled={refreshing}
+          onClick={refresh}
+        >
+          {tr(
+            l,
+            refreshing ? "读取中…" : "刷新只读状态",
+            refreshing ? "Reading…" : "Refresh read-only state",
+          )}
+        </button>
+      )}
+      {refreshError && (
+        <p class="notice" role="alert">
+          {refreshError}
+        </p>
+      )}
       {!!(m.state || m.metrics?.length) && (
         <div class="metrics">
           {m.state && <span class="state">{status(m.state, l)}</span>}

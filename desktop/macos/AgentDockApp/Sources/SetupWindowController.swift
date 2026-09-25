@@ -39,7 +39,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
     private let updateButton = NSButton(title: L10n.text("Check for updates"), target: nil, action: nil)
 
     private let publicMode = NSSegmentedControl(
-        labels: [L10n.text("Local only"), L10n.text("Temporary address"), L10n.text("Custom domain")],
+        labels: [L10n.text("Local only"), L10n.text("Temporary address"), L10n.text("Custom domain"), L10n.text("Private tunnel")],
         trackingMode: .selectOne,
         target: nil,
         action: nil
@@ -55,6 +55,9 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
     private let permissionsButton = NSButton(title: L10n.text("Check permissions"), target: nil, action: nil)
     private let advancedButton = NSButton(title: L10n.text("Advanced settings"), target: nil, action: nil)
     private let logsButton = NSButton(title: L10n.text("Open logs"), target: nil, action: nil)
+    private let diagnosticsButton = NSButton(title: L10n.text("Diagnostics"), target: nil, action: nil)
+    private lazy var diagnosticsWindow = DiagnosticsWindowController(service: service)
+    @objc private func openDiagnosticsPressed() { diagnosticsWindow.present() }
 
     private var currentStatus = ServiceStatus.missing
     private var initialMode: TunnelMode = .local
@@ -321,6 +324,9 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
         statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         statusLabel.isHidden = true
 
+        diagnosticsButton.bezelStyle = .inline
+        diagnosticsButton.target = self
+        diagnosticsButton.action = #selector(openDiagnosticsPressed)
         logsButton.bezelStyle = .inline
         logsButton.target = self
         logsButton.action = #selector(openLogsPressed)
@@ -335,7 +341,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
         applyButton.target = self
         applyButton.action = #selector(applyPressed)
 
-        let footer = NSStackView(views: [logsButton, permissionsButton, advancedButton, progress, statusLabel, NSView(), applyButton])
+        let footer = NSStackView(views: [logsButton, permissionsButton, advancedButton, diagnosticsButton, progress, statusLabel, NSView(), applyButton])
         footer.orientation = .horizontal
         footer.alignment = .centerY
         footer.spacing = 10
@@ -453,7 +459,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
             cancelPublicCheck(clearLastResult: true)
         }
         displayedPublicMCPURL = publicMCPURL
-        publicAddress.stringValue = publicMCPURL?.absoluteString ?? L10n.text("Disabled")
+        publicAddress.stringValue = publicMCPURL?.absoluteString ?? ((try? service.configuredTunnelMode()) == .secure ? L10n.text("Private tunnel · remote delivery unconfirmed") : L10n.text("Disabled"))
 
         guard let publicMCPURL else {
             publicCheckStatus.stringValue = ""
@@ -550,6 +556,9 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func selectCurrentMode(configuration: ServiceConfiguration?) {
+        if (try? service.configuredTunnelMode()) == .secure {
+            initialMode = .secure; initialServerURL = ""; select(mode: .secure); return
+        }
         guard let publicURL = configuration?.publicURL, !publicURL.isEmpty else {
             initialMode = .local
             initialServerURL = ""
@@ -586,6 +595,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
         case .local: return 0
         case .quick: return 1
         case .named: return 2
+        case .secure: return 3
         }
     }
 
@@ -593,6 +603,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
         switch publicMode.selectedSegment {
         case 1: return .quick
         case 2: return .named
+        case 3: return .secure
         default: return .local
         }
     }

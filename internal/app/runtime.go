@@ -12,9 +12,12 @@ import (
 
 	acpruntime "github.com/uvwt/agentdock/internal/acp"
 	"github.com/uvwt/agentdock/internal/config"
+	"github.com/uvwt/agentdock/internal/diagnostics"
 	"github.com/uvwt/agentdock/internal/envstore"
 	"github.com/uvwt/agentdock/internal/evolution"
 	mcpclient "github.com/uvwt/agentdock/internal/mcp/client"
+	"github.com/uvwt/agentdock/internal/publicartifacts"
+	"github.com/uvwt/agentdock/internal/semantic"
 	"github.com/uvwt/agentdock/internal/taskstate"
 	toolacp "github.com/uvwt/agentdock/internal/tool/acp"
 	toolbrowser "github.com/uvwt/agentdock/internal/tool/browser"
@@ -28,7 +31,9 @@ import (
 	toolrecall "github.com/uvwt/agentdock/internal/tool/recall"
 	toolskill "github.com/uvwt/agentdock/internal/tool/skill"
 	tooltask "github.com/uvwt/agentdock/internal/tool/task"
+	"github.com/uvwt/agentdock/internal/workresult"
 	"github.com/uvwt/agentdock/internal/workspace"
+	"github.com/uvwt/agentdock/internal/worktree"
 )
 
 type Result = toolcore.Result
@@ -48,6 +53,10 @@ type Runtime struct {
 	recall         *toolrecall.Service
 	evolution      *evolution.Service
 	taskTools      *tooltask.Service
+	workResults    *workresult.Service
+	navigation     *semantic.Service
+	worktrees      *worktree.Service
+	traces         *diagnostics.Recorder
 	acp            *toolacp.Service
 	lifecycleMu    sync.RWMutex
 	commandCtx     context.Context
@@ -106,6 +115,10 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	runtime.recall = toolrecall.New(func() config.Config { return runtime.cfg })
 	runtime.evolution = evolution.New(func() config.Config { return runtime.cfg }, tasks)
 	runtime.taskTools = tooltask.New(func() config.Config { return runtime.cfg }, tasks, runtime.evolution)
+	runtime.workResults = workresult.New(cfg.AgentDockHome, func(_ context.Context, id string) (taskstate.Task, error) { return tasks.Get(id) }, runtime.command.Jobs, publicartifacts.New(cfg.AgentDockHome, cfg.OAuthServerURL, cfg.Port))
+	runtime.traces = diagnostics.New(runtime.ToolNames())
+	runtime.navigation = semantic.New(cfg.GoplsExecutablePath, runtime.command.InternalCommandEnv)
+	runtime.worktrees = worktree.New(cfg.AgentDockHome)
 	if cfg.ACPEnabled {
 		managers := make(map[string]*acpruntime.Manager)
 		for _, profile := range cfg.EffectiveACPProfiles() {
@@ -166,6 +179,11 @@ func (r *Runtime) Close() error {
 		if commandCancel != nil {
 			commandCancel()
 		}
+		if r.navigation != nil {
+			if err := r.navigation.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
 		if r.desktop != nil {
 			if err := r.desktop.Close(); err != nil {
 				closeErrors = append(closeErrors, fmt.Errorf("close desktop runtime: %w", err))
@@ -225,7 +243,18 @@ func (r *Runtime) ToolDefinition(name string) (ToolDefinition, bool) {
 	return toolDefinitionForConfig(name, r.cfg)
 }
 
-func (r *Runtime) Call(ctx context.Context, name string, args map[string]any) (Result, error) {
+func (r *Runtime) Call(ctx context.Context, name string, args map[string]any) (result Result, err error) {
+	if r.traces != nil {
+		finish := r.traces.Start(name)
+		defer func() {
+			code := ""
+			var e *ToolError
+			if errors.As(err, &e) {
+				code = e.Code
+			}
+			finish(err == nil, code)
+		}()
+	}
 	if args == nil {
 		args = map[string]any{}
 	}

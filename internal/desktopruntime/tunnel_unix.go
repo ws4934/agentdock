@@ -16,6 +16,7 @@ import (
 
 	"github.com/uvwt/agentdock/internal/envstore"
 	"github.com/uvwt/agentdock/internal/fs/atomicfile"
+	"github.com/uvwt/agentdock/internal/securetunnel"
 )
 
 func loadTunnelEnvironment(runtimeRoot string) (unixRuntimeManifest, string, map[string]string, error) {
@@ -32,7 +33,7 @@ func loadTunnelEnvironment(runtimeRoot string) (unixRuntimeManifest, string, map
 
 func tunnelMode(values map[string]string) string {
 	mode := strings.ToLower(strings.TrimSpace(values["AGENTDOCK_TUNNEL_MODE"]))
-	if mode != "quick" && mode != "named" {
+	if mode != "quick" && mode != "named" && mode != "secure" {
 		return "none"
 	}
 	return mode
@@ -96,6 +97,18 @@ func platformConfigureTunnel(ctx context.Context, request TunnelConfigureRequest
 	if err != nil {
 		return err
 	}
+	if request.Mode == "secure" {
+		home := core["AGENTDOCK_HOME"]
+		if home == "" {
+			home = securetunnel.DefaultHome()
+		}
+		if _, err := securetunnel.New(home, securetunnel.ClientEnvironment).Load(); err != nil {
+			return err
+		}
+		if strings.TrimSpace(core["AGENTDOCK_AUTH_TOKEN"]) == "" {
+			return errors.New("Secure MCP Tunnel requires existing local Bearer authentication")
+		}
+	}
 	if err := tunnelServiceAction(ctx, manifest, "stop"); err != nil && !strings.Contains(err.Error(), "not loaded") {
 		return err
 	}
@@ -105,7 +118,7 @@ func platformConfigureTunnel(ctx context.Context, request TunnelConfigureRequest
 	quickURL := filepath.Join(root, "quick-tunnel-url.txt")
 	_ = os.Remove(quickURL)
 	switch mode {
-	case "none":
+	case "none", "secure":
 		delete(core, "AGENTDOCK_SERVER_URL")
 		core["AGENTDOCK_OAUTH_ENABLED"] = "false"
 	case "quick":
@@ -127,7 +140,7 @@ func platformConfigureTunnel(ctx context.Context, request TunnelConfigureRequest
 		core["AGENTDOCK_SERVER_URL"] = origin
 		core["AGENTDOCK_OAUTH_ENABLED"] = "true"
 	default:
-		return errors.New("Tunnel 模式必须是 none、quick 或 named")
+		return errors.New("Tunnel 模式必须是 none、quick、named 或 secure")
 	}
 	if err := writeEnvironment(manifest.EnvironmentFile, core); err != nil {
 		return err
@@ -202,6 +215,12 @@ func platformLaunchTunnel(ctx context.Context, runtimeRoot string) error {
 	}
 	mode := tunnelMode(values)
 	switch mode {
+	case "secure":
+		home := securetunnel.DefaultHome()
+		if _, _, core, err := loadCoreEnvironment(runtimeRoot); err == nil && strings.TrimSpace(core["AGENTDOCK_HOME"]) != "" {
+			home = core["AGENTDOCK_HOME"]
+		}
+		return securetunnel.New(home, securetunnel.ClientEnvironment).Run(ctx, stdout, stderr)
 	case "quick":
 		target := strings.TrimSpace(values["AGENTDOCK_TUNNEL_TARGET"])
 		if target == "" {

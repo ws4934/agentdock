@@ -2,9 +2,11 @@ package command
 
 import (
 	"context"
+	"sync"
 
 	"github.com/uvwt/agentdock/internal/config"
 	"github.com/uvwt/agentdock/internal/envstore"
+	"github.com/uvwt/agentdock/internal/jobrun"
 	"github.com/uvwt/agentdock/internal/tool/command/session"
 	"github.com/uvwt/agentdock/internal/workspace"
 )
@@ -20,6 +22,9 @@ type Service struct {
 	sessions       *session.Store
 	resolveSkill   SkillResolver
 	commandContext CommandContext
+	jobOnce        sync.Once
+	jobs           *jobrun.Store
+	jobErr         error
 }
 
 func New(configProvider ConfigProvider, ws *workspace.Workspace, envs *envstore.Store, resolveSkill SkillResolver, commandContext CommandContext) *Service {

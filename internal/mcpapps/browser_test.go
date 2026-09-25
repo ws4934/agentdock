@@ -23,15 +23,22 @@ import (
 // 隔离宿主只服务合成数据，不接管用户浏览器，不调用实际 MCP 工具。
 const browserHost = `<!doctype html><meta charset="utf-8"><style>body{margin:0;background:#fafafa}iframe{width:100%%;height:120px;border:0;display:block}</style><iframe sandbox="allow-scripts allow-same-origin"></iframe><script>
 const frame=document.querySelector('iframe'); let mode=%s; const html=%s, data=%s;
-window.messages=[];window.errors=[];
+window.messages=[];window.errors=[];window.refreshMode='success';window.pendingRefresh=null;
 window.send=(method,params)=>frame.contentWindow.postMessage({jsonrpc:'2.0',method,params},'*');
 window.result=d=>send('ui/notifications/tool-result',{structuredContent:d,content:[]});
+window.replyRefresh=(request)=>{
+ let projection=JSON.parse(JSON.stringify(data.work_result||{}));
+ projection.observed_at='refreshed';
+ if(refreshMode==='wrong-scope')projection.task.id='another-task';
+ const result=refreshMode==='failed'?{isError:true,content:[{type:'text',text:'Synthetic read failure'}]}:{structuredContent:{work_result:projection},content:[]};
+ frame.contentWindow.postMessage({jsonrpc:'2.0',id:request.id,result},'*');
+};
 window.teardown=()=>frame.contentWindow.postMessage({jsonrpc:'2.0',id:801,method:'ui/resource-teardown',params:{}},'*');
 window.addEventListener('message',e=>{
  if(e.source!==frame.contentWindow)return;const m=e.data;messages.push(m);
  if(m.method==='ui/initialize'){
   if(mode==='timeout')return;
-  const reply=mode==='init-error'?{error:{code:-32000,message:'Synthetic init error'}}:{result:{protocolVersion:'2026-01-26',hostInfo:{name:'isolated-test-host',version:'1.0'},hostCapabilities:{openLinks:{}},hostContext:{theme:'light',locale:'zh-CN'}}};
+  const reply=mode==='init-error'?{error:{code:-32000,message:'Synthetic init error'}}:{result:{protocolVersion:'2026-01-26',hostInfo:{name:'isolated-test-host',version:'1.0'},hostCapabilities:{openLinks:{},serverTools:{}},hostContext:{theme:'light',locale:'zh-CN'}}};
   frame.contentWindow.postMessage({jsonrpc:'2.0',id:m.id,...reply},'*');
  }
  if(m.method==='ui/notifications/initialized'){
@@ -44,6 +51,10 @@ window.addEventListener('message',e=>{
  }
  if(m.method==='ui/notifications/size-changed')frame.style.height=m.params.height+'px';
  if(m.method==='ui/open-link')frame.contentWindow.postMessage({jsonrpc:'2.0',id:m.id,result:{}},'*');
+ if(m.method==='tools/call'){
+  if(m.params.name!=='work_result_read'){errors.push('Unexpected mutation tool');return;}
+  if(refreshMode==='hold')pendingRefresh=m;else replyRefresh(m);
+ }
 });
 frame.addEventListener('load',()=>frame.contentWindow.addEventListener('error',e=>errors.push(e.message)));
 frame.srcdoc=html;
@@ -64,6 +75,7 @@ window.cancelAnimationFrame=function(id){__audit.frames.delete(id);return caf(id
 `
 
 var fixtures = map[string]any{
+	"work_result":       map[string]any{"work_result": map[string]any{"task": map[string]any{"id": "work-fixture", "title": "冻结交付验证", "final_review": map[string]any{"status": "pass"}}, "workdir": "/synthetic/project", "observed_at": "initial", "source": map[string]any{"complete": true, "revision": "src1:fixture", "scope": []string{"source.go"}}, "selection": map[string]any{"task_id": "work-fixture", "workdir": "/synthetic/project", "source_paths": []string{"source.go"}}, "frozen": false, "validation": "not_verified", "changes": []string{"M source.go"}, "jobs": []any{}, "artifacts": []any{}}},
 	"agentdock_context": map[string]any{"skills": []any{map[string]any{"name": "macos-desktop", "description": "原生桌面能力"}, map[string]any{"name": "<img src=x onerror=alert(1)>", "description": "不可信数据必须作为文本"}}, "dynamic_mcp": []any{map[string]any{"name": "pencil", "status": "ready"}}},
 	"task_progress":     map[string]any{"action": "get", "task_id": "test-task", "task_summary": map[string]any{"id": "test-task", "title": "验证反馈组件", "summary": "初始阶段", "status": "active", "step_count": 3, "completed_step_count": 1, "steps": []any{map[string]any{"id": "one", "title": "建立连接", "status": "completed"}, map[string]any{"id": "two", "title": "浏览器验收", "status": "in_progress"}, map[string]any{"id": "three", "title": "生成安装包", "status": "pending"}}}},
 	"file_change":       map[string]any{"action": "patch", "files_changed": 2, "summary": "更新布局与状态处理", "insertions": 32, "deletions": 8, "diff_preview": "--- a/main.ts\n+++ b/main.ts\n-old\n+new"},
@@ -137,7 +149,7 @@ func TestFeedbackBrowser(t *testing.T) {
 	}
 	doc := `document.querySelector('iframe').contentDocument`
 	run(chromedp.EmulateViewport(640, 800))
-	for _, view := range []string{"agentdock_context", "task_progress", "file_change", "dynamic_mcp", "artifact", "workflow", "recall", "acp_status"} {
+	for _, view := range []string{"agentdock_context", "task_progress", "file_change", "dynamic_mcp", "artifact", "workflow", "recall", "acp_status", "work_result"} {
 		open(view, "normal")
 		ready()
 		check(`window.errors.length===0`)
@@ -215,7 +227,10 @@ func TestFeedbackBrowser(t *testing.T) {
 	run(chromedp.Poll(doc+`.querySelector('.summary').textContent==='更新阶段'`, nil))
 	check(doc + `.querySelector('.toggle').getAttribute('aria-expanded')==='true'`)
 	check(doc + `.activeElement===` + doc + `.querySelector('.toggle')`)
-	run(chromedp.Sleep(100 * time.Millisecond))
+	// Establish the duplicate-result baseline only after the prior real update's
+	// resize notification has reached the host. A fixed sleep races slow frames.
+	run(chromedp.Evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`, nil, func(p *cdruntime.EvaluateParams) *cdruntime.EvaluateParams { return p.WithAwaitPromise(true) }))
+	run(chromedp.Poll(`frame.contentWindow.__audit.frames.size===0 && messages.filter(m=>m.method==='ui/notifications/size-changed').at(-1)?.params.height===Math.ceil(`+doc+`.getElementById('content').getBoundingClientRect().height)`, nil))
 	eval(`window.mutations=0;window.mo=new MutationObserver(rs=>mutations+=rs.length);mo.observe(` + doc + `.getElementById('content'),{subtree:true,childList:true,attributes:true,characterData:true});window.beforeSizes=messages.filter(m=>m.method==='ui/notifications/size-changed').length;for(let i=0;i<1000;i++)result(next)`)
 	run(chromedp.Sleep(1200 * time.Millisecond))
 	check(`window.mutations===0`)
@@ -263,11 +278,39 @@ func TestFeedbackBrowser(t *testing.T) {
 	check(`frame.contentWindow.__audit.listeners===0 && frame.contentWindow.__audit.observers===0 && frame.contentWindow.__audit.timers.size===0 && frame.contentWindow.__audit.frames.size===0`)
 	check(`!messages.some(m=>m.method==='tools/call'||m.method==='ui/message')`)
 
-	// 同一页面同时承载八类卡片：记录冷挂载耗时，并检查全部卡片闲置后不再发消息。
+	// Work results refresh only on explicit user input, use the read tool, and
+	// reject stale in-flight responses or results belonging to another task.
+	open("work_result", "normal")
+	ready()
+	check(`!messages.some(m=>m.method==='tools/call')`)
+	eval(doc + `.querySelector('.toggle').click()`)
+	eval(doc + `.querySelector('.refresh-result').click()`)
+	run(chromedp.Poll(doc+`.body.innerText.includes('refreshed')`, nil))
+	check(doc + `.querySelector('.toggle').getAttribute('aria-expanded')==='true'`)
+	check(`messages.filter(m=>m.method==='tools/call').length===1 && messages.find(m=>m.method==='tools/call').params.name==='work_result_read'`)
+	for _, mode := range []string{"failed", "wrong-scope"} {
+		eval(`refreshMode=` + j(mode))
+		eval(doc + `.querySelector('.refresh-result').click()`)
+		run(chromedp.Poll(doc+`.body.innerText.includes('刷新失败')`, nil))
+		check(doc + `.querySelector('[data-entity]').getAttribute('data-entity')==='work-fixture'`)
+	}
+	eval(`refreshMode='hold'`)
+	eval(doc + `.querySelector('.refresh-result').click()`)
+	run(chromedp.Poll(`pendingRefresh!==null`, nil))
+	eval(`window.newer=JSON.parse(JSON.stringify(data));newer.work_result.observed_at='newer-host-result';result(newer)`)
+	run(chromedp.Poll(doc+`.body.innerText.includes('newer-host-result')`, nil))
+	eval(`refreshMode='success';replyRefresh(pendingRefresh)`)
+	run(chromedp.Poll(doc+`.body.innerText.includes('刷新失败')`, nil))
+	check(doc + `.body.innerText.includes('newer-host-result')`)
+	eval(`newer.work_result.frozen=true;newer.work_result.result_id='frozen-fixture';result(newer)`)
+	run(chromedp.Poll(`!`+doc+`.querySelector('.refresh-result')`, nil))
+	check(`messages.filter(m=>m.method==='tools/call').every(m=>m.params.name==='work_result_read')`)
+
+	// 同一页面同时承载九类卡片：记录冷挂载耗时，并检查全部卡片闲置后不再发消息。
 	run(chromedp.EmulateViewport(960, 900))
-	eval(`window.batch=[];window.batchStarted=performance.now();document.body.replaceChildren();for(const view of ['agentdock_context','task_progress','file_change','dynamic_mcp','artifact','workflow','recall','acp_status']){const f=document.createElement('iframe');f.style.height='160px';f.src=` + j(server.URL) + `+'/?view='+view+'&mode=normal';batch.push(f);document.body.append(f)}`)
+	eval(`window.batch=[];window.batchStarted=performance.now();document.body.replaceChildren();for(const view of ['agentdock_context','task_progress','file_change','dynamic_mcp','artifact','workflow','recall','acp_status','work_result']){const f=document.createElement('iframe');f.style.height='160px';f.src=` + j(server.URL) + `+'/?view='+view+'&mode=normal';batch.push(f);document.body.append(f)}`)
 	run(chromedp.Poll(`batch.every(f=>f.contentDocument?.querySelector('iframe')?.contentDocument?.querySelector('[data-entity]'))`, nil, chromedp.WithPollingTimeout(15*time.Second)))
-	t.Logf("eight simultaneous views mounted in %v ms (local fixture transport)", eval(`performance.now()-batchStarted`))
+	t.Logf("nine simultaneous views mounted in %v ms (local fixture transport)", eval(`performance.now()-batchStarted`))
 	run(chromedp.Sleep(400 * time.Millisecond))
 	eval(`window.batchCounts=batch.map(f=>f.contentWindow.messages.length)`)
 	run(chromedp.Sleep(800 * time.Millisecond))

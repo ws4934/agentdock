@@ -12,6 +12,8 @@ import (
 
 	"github.com/uvwt/agentdock/internal/buildinfo"
 	"github.com/uvwt/agentdock/internal/desktopruntime"
+	"github.com/uvwt/agentdock/internal/jobrun"
+	"github.com/uvwt/agentdock/internal/securetunnel"
 	"github.com/uvwt/agentdock/internal/selfupdate"
 )
 
@@ -25,6 +27,12 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	if len(args) > 0 && args[0] == "secure-tunnel" {
+		return securetunnel.Command(ctx, args[1:], stdout, stderr)
+	}
+	if len(args) == 3 && args[0] == "job-supervise" {
+		return jobrun.Supervise(ctx, args[1], args[2])
+	}
 	if handled, err := selfupdate.HandleInternalCommand(ctx, args); handled {
 		return err
 	}

@@ -9,6 +9,9 @@ const (
 )
 
 func InputSchema(name string) (map[string]any, bool) {
+	if schema, ok := managedInput(name); ok {
+		return schema, true
+	}
 	stringProp := toolcontract.String
 	boolProp := toolcontract.Boolean
 	boundedIntProp := toolcontract.BoundedInteger
@@ -24,7 +27,10 @@ func InputSchema(name string) (map[string]any, bool) {
 		props["skill_env"] = stringProp("Optional Skill name whose isolated environment is loaded without changing workdir. Kept for environment-only compatibility.")
 		props["env"] = map[string]any{"type": "object", "description": "Explicit command environment values. These override the selected Skill environment.", "additionalProperties": map[string]any{"type": "string"}}
 		props["timeout_ms"] = boundedIntProp("Timeout in milliseconds. Must be positive and is capped at 86400000.", 1, 86400000)
-		props["execution_mode"] = map[string]any{"type": "string", "description": "Execution mode. Defaults to auto: wait up to yield_time_ms, then return a running session. sync waits for exit; async returns a session immediately.", "enum": []string{"auto", "sync", "async"}}
+		props["execution_mode"] = map[string]any{"type": "string", "description": "auto/sync/async are Core-owned sessions. managed explicitly starts a non-interactive detached job that survives Core restart; requires request_id and is observed through job_observe.", "enum": []string{"auto", "sync", "async", "managed"}}
+		props["request_id"] = stringProp("Required stable idempotency key for managed execution. Reuse to recover the same receipt after a network error.")
+		props["task_id"] = stringProp("Optional task associated with a managed execution.")
+		props["title"] = stringProp("Short managed-job label, not a command dump.")
 		props["yield_time_ms"] = boundedIntProp("Foreground wait threshold for execution_mode=auto. Defaults to 5000 and is capped at 30000 milliseconds.", 0, 30000)
 		props["max_output_bytes"] = boundedIntProp("Maximum output bytes. Defaults to 65536 and is capped at 4194304.", 1, MaxOutputBytes)
 		props["stdin"] = stringProp("Initial stdin.")
@@ -46,6 +52,9 @@ func InputSchema(name string) (map[string]any, bool) {
 }
 
 func OutputSchema(name string) (map[string]any, bool) {
+	if schema, ok := managedOutput(name); ok {
+		return schema, true
+	}
 	stringProp := toolcontract.String
 	intProp := toolcontract.Integer
 	boolProp := toolcontract.Boolean

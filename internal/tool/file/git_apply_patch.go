@@ -22,7 +22,10 @@ func (svc *Service) applyPatch(ctx context.Context, request EditRequest) (Result
 		return nil, err
 	}
 	if strings.HasPrefix(strings.TrimSpace(patch), "*** Begin Patch") {
-		return svc.applyEnvelopePatch(patch, request.DryRun, workdir.Display)
+		return svc.applyEnvelopePatchGuarded(patch, request.DryRun, workdir.Display, request.ExpectedRevisions)
+	}
+	if len(request.ExpectedRevisions) > 0 {
+		return nil, toolError("GUARD_UNSUPPORTED", "revision-guarded patches must use the structured envelope; never downgrade the guard", "validation")
 	}
 	maxDiffBytes := boundedInt(intValue(request.MaxDiffBytes, 65536), 65536, 1, maxTextOutputBytes)
 	preview := textutil.SafeTruncateString(patch, maxDiffBytes)

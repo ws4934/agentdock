@@ -8,7 +8,7 @@ import (
 )
 
 func TestEmbeddedViewsAreContentAddressed(t *testing.T) {
-	if len(resources) != 8 {
+	if len(resources) != 9 {
 		t.Fatalf("views=%d", len(resources))
 	}
 	seen := map[string]bool{}

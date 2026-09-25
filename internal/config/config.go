@@ -46,6 +46,7 @@ type Config struct {
 	MCPAppsEnabled               bool
 	BrowserEnabled               bool
 	DesktopEnabled               bool
+	GoplsExecutablePath          string
 	BrowserExecutablePath        string
 	BrowserCDPURL                string
 	BrowserReuseExistingCDP      bool
@@ -158,6 +159,7 @@ func FromEnv() (Config, error) {
 		MCPAppsEnabled:               mcpAppsEnabled,
 		BrowserEnabled:               browserEnabled,
 		DesktopEnabled:               desktopEnabled,
+		GoplsExecutablePath:          strings.TrimSpace(os.Getenv("AGENTDOCK_GOPLS_EXECUTABLE_PATH")),
 		BrowserExecutablePath:        os.Getenv("AGENTDOCK_BROWSER_EXECUTABLE_PATH"),
 		BrowserCDPURL:                strings.TrimSpace(os.Getenv("AGENTDOCK_BROWSER_CDP_URL")),
 		BrowserReuseExistingCDP:      browserReuseExistingCDP,

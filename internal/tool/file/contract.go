@@ -25,6 +25,9 @@ Add/Delete/Update operations may repeat in one envelope. Update lines use a lead
 )
 
 func InputSchema(name string) (map[string]any, bool) {
+	if schema, ok := batchInput(name); ok {
+		return schema, true
+	}
 	stringProp := toolcontract.String
 	intProp := toolcontract.Integer
 	boolProp := toolcontract.Boolean
@@ -34,6 +37,7 @@ func InputSchema(name string) (map[string]any, bool) {
 
 	switch name {
 	case ToolReadFile:
+		props["expected_read_revision"] = stringProp("Optional whole-file revision from read_file; mismatch fails rather than reading changed source.")
 		props["path"] = stringProp(PathDescription("Host path. Relative paths resolve from ~/AgentDock."))
 		AddRuntimeProperties(props)
 		props["start_line"] = intProp("1-based start line.")
@@ -65,6 +69,9 @@ func InputSchema(name string) (map[string]any, bool) {
 		props["max_results"] = boundedIntProp("Maximum matches. Defaults to 100 and is capped at 1000.", 1, 1000)
 		required = []string{"query"}
 	case ToolFileEdit:
+		props["expected_read_revision"] = stringProp("Whole-file revision for replace/add/delete/move. Use absent for create-only.")
+		props["expected_destination_revision"] = stringProp("Required when a guarded move overwrites an existing destination.")
+		props["expected_revisions"] = map[string]any{"type": "object", "description": "Structured patch path to revision map. Cover every touched path; use absent for additions.", "maxProperties": 128, "additionalProperties": map[string]any{"type": "string"}}
 		props["action"] = map[string]any{"type": "string", "description": "File edit action.", "enum": []string{"replace", "patch", "add", "delete", "move"}}
 		props["path"] = stringProp(PathDescription("Host path for replace, add, delete, or move. Relative paths resolve from ~/AgentDock."))
 		AddRuntimeProperties(props)
@@ -88,6 +95,9 @@ func InputSchema(name string) (map[string]any, bool) {
 }
 
 func OutputSchema(name string) (map[string]any, bool) {
+	if schema, ok := batchOutput(name); ok {
+		return schema, true
+	}
 	stringProp := toolcontract.String
 	intProp := toolcontract.Integer
 	boolProp := toolcontract.Boolean
@@ -98,6 +108,7 @@ func OutputSchema(name string) (map[string]any, bool) {
 
 	switch name {
 	case ToolReadFile:
+		props["read_revision"] = stringProp("Exact whole-file revision bound to canonical source path.")
 		props["path"] = stringProp("Host path or skill:// resource URI. Relative Host paths resolve from ~/AgentDock.")
 		props["content"] = stringProp("Text content slice.")
 		props["encoding"] = stringProp("Detected text encoding.")

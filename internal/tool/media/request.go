@@ -26,6 +26,7 @@ type ViewImageRequest struct {
 
 // FilePublishRequest.File 是 connector 文件重写产生的动态叶子；Path 是普通本地路径入口。
 type FilePublishRequest struct {
+	Delivery         string `json:"delivery,omitempty"`
 	File             any    `json:"file,omitempty"`
 	Path             string `json:"path,omitempty"`
 	RetentionSeconds *int   `json:"retention_seconds,omitempty"`

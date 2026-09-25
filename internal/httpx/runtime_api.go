@@ -19,6 +19,7 @@ import (
 func registerRuntimeAPI(mux *http.ServeMux, runtime runtimeapi.Runtime, cfg config.Config, oauthStore *auth.OAuthStore) {
 	h := runtimeAPIHandler(runtime, cfg, oauthStore)
 	mux.HandleFunc("/internal/runtime/status", h)
+	mux.HandleFunc("/internal/runtime/diagnostics", h)
 	mux.HandleFunc("/internal/runtime/capabilities", h)
 	mux.HandleFunc("/internal/runtime/skills", h)
 	mux.HandleFunc("/internal/runtime/skills/", h)

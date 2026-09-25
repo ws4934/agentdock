@@ -116,14 +116,25 @@ func (svc *Service) searchTextRG(ctx context.Context, p workspace.Path, opts Sea
 	if opts.ContextLines > 0 {
 		args = append(args, "--context", strconv.Itoa(opts.ContextLines))
 	}
-	args = append(args, opts.Query, p.Abs)
+	args = append(args, "--", opts.Query, p.Abs)
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, rg, args...)
-	cmd.Dir = p.Abs
+	cmd.Dir = searchWorkingDirectory(p.Abs)
 	processcontrol.Configure(cmd)
-	output, err := cmd.Output()
+	stdout := &searchBoundedOutput{limit: 8 << 20}
+	stderr := &searchBoundedOutput{limit: 4096}
+	cmd.Stdout, cmd.Stderr = stdout, stderr
+	err = cmd.Run()
+	output := stdout.data
+	if stdout.truncated {
+		if i := bytes.LastIndexByte(output, '\n'); i >= 0 {
+			output = output[:i+1]
+		} else {
+			output = nil
+		}
+	}
 	if err != nil {
 		if exit, ok := err.(*exec.ExitError); ok && exit.ExitCode() == 1 {
 			return Result{"query": opts.Query, "engine": "rg", "matches": []map[string]any{}, "total_matches": 0, "truncated": false}, true, nil
@@ -134,7 +145,7 @@ func (svc *Service) searchTextRG(ctx context.Context, p workspace.Path, opts Sea
 	if !ok {
 		return nil, true, toolError("SEARCH_FAILED", "failed to parse ripgrep search results", "runtime")
 	}
-	return Result{"query": opts.Query, "engine": "rg", "matches": matches, "total_matches": len(matches), "truncated": truncated}, true, nil
+	return Result{"query": opts.Query, "engine": "rg", "matches": matches, "total_matches": len(matches), "truncated": truncated || stdout.truncated, "partial": stdout.truncated}, true, nil
 }
 
 func (svc *Service) parseRGJSON(output []byte, searchRoot string, opts SearchOptions) ([]map[string]any, bool, bool) {

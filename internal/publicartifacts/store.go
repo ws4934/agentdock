@@ -25,6 +25,7 @@ type Store struct {
 }
 
 type Metadata struct {
+	Private    bool      `json:"private,omitempty"`
 	ArtifactID string    `json:"artifact_id"`
 	Filename   string    `json:"filename"`
 	MimeType   string    `json:"mime_type"`
@@ -38,6 +39,7 @@ type Metadata struct {
 }
 
 type PublishRequest struct {
+	Private          bool
 	Path             string
 	RetentionSeconds int
 	Now              time.Time
@@ -45,6 +47,7 @@ type PublishRequest struct {
 }
 
 type PublishBytesRequest struct {
+	Private          bool
 	Filename         string
 	Data             []byte
 	MimeType         string
@@ -101,6 +104,7 @@ func (s Store) Publish(req PublishRequest) (PublishResult, error) {
 		RetentionSeconds: req.RetentionSeconds,
 		Now:              now,
 		BaseURL:          req.BaseURL,
+		Private:          req.Private,
 	})
 }
 
@@ -131,10 +135,12 @@ func (s Store) PublishBytes(req PublishBytesRequest) (PublishResult, error) {
 		RetentionSeconds: req.RetentionSeconds,
 		Now:              now,
 		BaseURL:          req.BaseURL,
+		Private:          req.Private,
 	})
 }
 
 type publishPayloadRequest struct {
+	Private          bool
 	ID               string
 	Dir              string
 	Payload          string
@@ -185,7 +191,7 @@ func (s Store) finishPublishedPayload(req publishPayloadRequest) (PublishResult,
 		width, height = imageDimensions(req.Payload, mimeType)
 	}
 	retention := retention(req.RetentionSeconds)
-	meta := Metadata{ArtifactID: req.ID, Filename: filename, MimeType: mimeType, Size: stat.Size(), SHA256: sha, CreatedAt: req.Now, ExpiresAt: req.Now.Add(retention), Archive: req.Archive, Width: width, Height: height}
+	meta := Metadata{Private: req.Private, ArtifactID: req.ID, Filename: filename, MimeType: mimeType, Size: stat.Size(), SHA256: sha, CreatedAt: req.Now, ExpiresAt: req.Now.Add(retention), Archive: req.Archive, Width: width, Height: height}
 	encoded, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
 		_ = os.RemoveAll(req.Dir)
@@ -197,7 +203,7 @@ func (s Store) finishPublishedPayload(req publishPayloadRequest) (PublishResult,
 	}
 	base := strings.TrimRight(firstNonEmpty(req.BaseURL, s.ServerURL), "/")
 	publicURL := ""
-	if base != "" {
+	if base != "" && !req.Private {
 		secret, err := s.ensureSecret()
 		if err != nil {
 			_ = os.RemoveAll(req.Dir)

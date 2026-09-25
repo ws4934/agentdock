@@ -23,6 +23,9 @@ func (svc *Service) ReadFile(ctx context.Context, request ReadRequest) (Result, 
 		return nil, toolError("INVALID_ARGUMENT", "path is required", "validation")
 	}
 	if selection.isWSL() {
+		if request.ExpectedReadRevision != "" {
+			return nil, toolError("REVISION_UNAVAILABLE", "WSL read revisions are not available; do not drop the requested guard", "validation")
+		}
 		return svc.readFileWSL(ctx, request, selection)
 	}
 
@@ -59,6 +62,9 @@ func (svc *Service) ReadFile(ctx context.Context, request ReadRequest) (Result, 
 		)
 	}
 	data := read.Data
+	if err := checkReadRevision(absPath, data, true, request.ExpectedReadRevision); err != nil {
+		return nil, err
+	}
 	if looksBinary(data) {
 		return nil, toolError("BINARY_FILE", "binary file read blocked for text tool", "validation")
 	}
@@ -68,6 +74,7 @@ func (svc *Service) ReadFile(ctx context.Context, request ReadRequest) (Result, 
 	maxBytes := boundedInt(intValue(request.MaxBytes, 262144), 262144, 1, maxTextOutputBytes)
 	content, meta := sliceText(string(data), intValue(request.StartLine, 1), intValue(request.EndLine, 0), maxBytes)
 	result := Result{"path": displayPath, "content": content, "encoding": "utf-8", "size_bytes": len(data), "truncated": meta.Truncated, "start_line": meta.Start, "end_line": meta.End, "total_lines": meta.Total}
+	result["read_revision"] = readRevision(absPath, data)
 	if meta.NextStartLine > 0 {
 		result["next_start_line"] = meta.NextStartLine
 	}

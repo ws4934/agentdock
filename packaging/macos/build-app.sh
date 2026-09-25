@@ -26,6 +26,7 @@ usage() {
   AGENTDOCK_MACOS_APP_OUTPUT_DIR 输出目录，默认 dist/macos-app
   AGENTDOCK_MACOS_OFFLINE_PAYLOAD_DIR
                                双架构离线载荷目录，构建 DMG 时必须提供
+                               可选提供每架构 gopls_darwin_<arch> 与 .sha256；有一份时必须齐全
   AGENTDOCK_MACOS_MIN_VERSION   最低 macOS 版本，默认 13.0
   AGENTDOCK_CODESIGN_IDENTITY   代码签名身份；默认 -（ad-hoc）
   AGENTDOCK_CODESIGN_KEYCHAIN   可选，指定签名身份所在钥匙串
@@ -184,6 +185,7 @@ iconutil -c icns "$ICONSET_DIR" -o "$RESOURCES_DIR/AgentDock.icns"
 helper_core_binaries=()
 helper_cloudflared_binaries=()
 helper_arbiter_binaries=()
+helper_gopls_binaries=()
 CORE_SKILL_BUNDLE="$RESOURCES_DIR/core-skills"
 for release_architecture in "${release_architectures[@]}"; do
   agentdock_archive="agentdock_darwin_${release_architecture}.tar.gz"
@@ -223,6 +225,14 @@ for release_architecture in "${release_architectures[@]}"; do
 
   helper_core_binaries+=("$payload_check_dir/bin/agentdock")
   helper_cloudflared_binaries+=("$OFFLINE_PAYLOAD_DIR/$cloudflared_binary")
+  gopls_binary="gopls_darwin_${release_architecture}"
+  if [[ -e "$OFFLINE_PAYLOAD_DIR/$gopls_binary" || -e "$OFFLINE_PAYLOAD_DIR/$gopls_binary.sha256" ]]; then
+    [[ -f "$OFFLINE_PAYLOAD_DIR/$gopls_binary" && ! -L "$OFFLINE_PAYLOAD_DIR/$gopls_binary" && -f "$OFFLINE_PAYLOAD_DIR/$gopls_binary.sha256" && ! -L "$OFFLINE_PAYLOAD_DIR/$gopls_binary.sha256" ]] || die "gopls 离线载荷不完整"
+    (cd "$OFFLINE_PAYLOAD_DIR"; shasum -a 256 -c "$gopls_binary.sha256")
+    gopls_file_output="$(file "$OFFLINE_PAYLOAD_DIR/$gopls_binary")"
+    [[ "$gopls_file_output" == *"$expected_file_architecture"* ]] || die "gopls 架构不匹配"
+    helper_gopls_binaries+=("$OFFLINE_PAYLOAD_DIR/$gopls_binary")
+  fi
   arbiter_binary="$TMP_DIR/agentdock-arbiter-$release_architecture"
   (
     cd "$ROOT_DIR"
@@ -250,6 +260,17 @@ else
   lipo -create "${helper_arbiter_binaries[@]}" -output "$HELPERS_DIR/agentdock-arbiter"
 fi
 chmod 0755 "$HELPERS_DIR/agentdock" "$HELPERS_DIR/cloudflared" "$HELPERS_DIR/agentdock-arbiter"
+if (( ${#helper_gopls_binaries[@]} > 0 )); then
+  (( ${#helper_gopls_binaries[@]} == ${#release_architectures[@]} )) || die "gopls 必须提供全部目标架构"
+  if (( ${#helper_gopls_binaries[@]} == 1 )); then
+    cp -p "$helper_gopls_binaries[1]" "$HELPERS_DIR/gopls"
+  else
+    lipo -create "${helper_gopls_binaries[@]}" -output "$HELPERS_DIR/gopls"
+  fi
+  chmod 0755 "$HELPERS_DIR/gopls"
+  [[ -f "$OFFLINE_PAYLOAD_DIR/gopls-NOTICES.txt" && ! -L "$OFFLINE_PAYLOAD_DIR/gopls-NOTICES.txt" ]] || die "gopls 离线载荷缺少 gopls-NOTICES.txt"
+  cp -p "$OFFLINE_PAYLOAD_DIR/gopls-NOTICES.txt" "$RESOURCES_DIR/gopls-NOTICES.txt"
+fi
 find "$CORE_SKILL_BUNDLE" -type d -exec chmod 0755 {} +
 find "$CORE_SKILL_BUNDLE" -type f -exec chmod 0644 {} +
 [[ -f "$CORE_SKILL_BUNDLE/manifest.json" && ! -L "$CORE_SKILL_BUNDLE/manifest.json" ]] || \
@@ -401,6 +422,9 @@ sign_macos_code "com.uvwt.agentdock.login-helper" "$MENU_LOGIN_HELPER"
 sign_macos_code "com.uvwt.agentdock.core" "$HELPERS_DIR/agentdock"
 sign_macos_code "com.uvwt.agentdock.cloudflared" "$HELPERS_DIR/cloudflared"
 sign_macos_code "com.uvwt.agentdock.arbiter" "$HELPERS_DIR/agentdock-arbiter"
+if [[ -f "$HELPERS_DIR/gopls" ]]; then
+  sign_macos_code "com.uvwt.agentdock.gopls" "$HELPERS_DIR/gopls"
+fi
 # 嵌套代码先分别签名，再签外层 App。不要用 --deep 做签名操作，否则会重新签
 # Core/cloudflared 并破坏它们的稳定代码身份；--deep 只用于最终递归验证。
 sign_macos_code "$BUNDLE_ID" "$APP_DIR"

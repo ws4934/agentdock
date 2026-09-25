@@ -216,6 +216,20 @@ final class ServiceController: @unchecked Sendable {
         return status == .enabled || status == .requiresApproval
     }
 
+    // Validate only our non-secret pinned client configuration before changing
+    // any running service. Official account/profile setup remains a user action.
+    func validateSecureTunnelSetup() async throws {
+        let configured = try? ManagedEnvironment.load(from: paths.environment).values["AGENTDOCK_HOME"]
+        let stateHome = configured?.isEmpty == false ? configured! : paths.stateDirectory.path
+        let result = try await runInBackground {
+            try runProcess(executable: self.paths.binary.path,
+                           arguments: ["secure-tunnel", "validate", "--home", stateHome])
+        }
+        guard result.status == 0 else {
+            throw ValidationError(L10n.text("Secure MCP Tunnel is not configured or its client changed. Run agentdock secure-tunnel configure with an existing official profile before enabling this mode."))
+        }
+    }
+
     func configuredTunnelMode() throws -> TunnelMode {
         guard FileManager.default.fileExists(atPath: paths.tunnelEnvironment.path) else {
             return .local
@@ -234,7 +248,7 @@ final class ServiceController: @unchecked Sendable {
         switch try configuredTunnelMode() {
         case .local:
             try setTunnelEnabled(false)
-        case .quick, .named:
+        case .quick, .named, .secure:
             try setTunnelEnabled(true)
             if tunnelService.status == .enabled, !(await waitForTunnelProcess()) {
                 // App Bundle 被原子替换后，macOS 偶尔仍把旧 SMAppService 注册显示为 enabled，

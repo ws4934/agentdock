@@ -8,6 +8,12 @@ import (
 
 func fileToolSpecs() []ToolSpec {
 	return []ToolSpec{
+		{Name: "read_files", Contract: fileToolContract, Title: "Read source ranges", Description: "Read up to 16 native source ranges with a shared byte budget. Deduplicates/coalesces adjacent ranges and returns read revisions and original request indexes. Each range is at most 400 lines.", Annotations: readOnlyToolAnnotations(false), Handler: typedToolHandler("read_files", func(ctx context.Context, r *Runtime, request toolfile.BatchReadRequest) (Result, error) {
+			return r.files.ReadFiles(ctx, request)
+		})},
+		{Name: "search_and_read", Contract: fileToolContract, Title: "Search and inspect source", Description: "Search then immediately inspect bounded matching source ranges. Source reads carry exact revisions; search and reads are separate observations, not an atomic snapshot.", Annotations: readOnlyToolAnnotations(false), Handler: typedToolHandler("search_and_read", func(ctx context.Context, r *Runtime, request toolfile.SearchReadRequest) (Result, error) {
+			return r.files.SearchAndRead(ctx, request)
+		})},
 		{Name: "read_file", Contract: fileToolContract, Title: "Read file", Description: toolfile.ToolDescription("Read a UTF-8 text file slice. Supports normal Host paths and skill://<name>/<path> resources from the active Skill version."), Annotations: readOnlyToolAnnotations(false), Handler: typedToolHandler("read_file", func(ctx context.Context, r *Runtime, request toolfile.ReadRequest) (Result, error) {
 			return r.files.ReadFile(ctx, request)
 		})},

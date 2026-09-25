@@ -51,6 +51,14 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 
 	taskID, isTaskPath := runtimeTaskID(path)
 	switch {
+	case path == "/internal/runtime/diagnostics":
+		if target, ok := runtime.(interface {
+			RuntimeDiagnostics(context.Context) (app.Result, error)
+		}); ok {
+			value, err := target.RuntimeDiagnostics(ctx)
+			return map[string]any(value), err
+		}
+		return nil, &app.ToolError{Code: "NOT_AVAILABLE", Message: "diagnostics are unavailable for this runtime", Category: "not_found"}
 	case path == "/internal/runtime/status":
 		return map[string]any(runtime.RuntimeStatus()), nil
 	case path == "/internal/runtime/capabilities":

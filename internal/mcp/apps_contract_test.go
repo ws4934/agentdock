@@ -23,7 +23,7 @@ func TestMCPAppsResourceContractMatrix(t *testing.T) {
 		nexus, acp bool
 		count      int
 	}{
-		{"standalone", false, false, 5}, {"nexus", true, false, 7}, {"acp", false, true, 6}, {"all", true, true, 8},
+		{"standalone", false, false, 6}, {"nexus", true, false, 8}, {"acp", false, true, 7}, {"all", true, true, 9},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -81,7 +81,7 @@ func TestMCPAppsResourceContractMatrix(t *testing.T) {
 					t.Fatalf("invalid bridge capability %#v", cap)
 				}
 			}
-			bound := 0
+			bound := map[string]bool{}
 			for tool, err := range h.session.Tools(t.Context(), nil) {
 				if err != nil {
 					t.Fatal(err)
@@ -90,8 +90,8 @@ func TestMCPAppsResourceContractMatrix(t *testing.T) {
 				if !ok {
 					continue
 				}
-				bound++
 				uri, _ := ui["resourceUri"].(string)
+				bound[uri] = true
 				if !available[uri] {
 					t.Fatalf("dangling binding %s -> %s", tool.Name, uri)
 				}
@@ -105,8 +105,8 @@ func TestMCPAppsResourceContractMatrix(t *testing.T) {
 					}
 				}
 			}
-			if bound != tt.count {
-				t.Fatalf("bound tools %d want %d", bound, tt.count)
+			if len(bound) != tt.count {
+				t.Fatalf("bound tools %d want %d", len(bound), tt.count)
 			}
 			for _, uri := range []string{"ui://agentdock/not-found", "ui://agentdock/context/v2-forged.html", "file:///etc/passwd"} {
 				if _, err := h.server.ReadAppResource(uri); err == nil {

@@ -38,6 +38,7 @@ func NewServer(runtime *app.Runtime, cfg config.Config) *Server {
 	)
 	if runtime != nil {
 		server.registerAppResources()
+		server.registerArtifactResources()
 		for _, definition := range runtime.ToolDefinitions() {
 			server.registerTool(definition)
 		}
@@ -304,6 +305,12 @@ func toolEnvelope(name string, structured any, err error) map[string]any {
 				return map[string]any{"isError": false, "structuredContent": clean, "content": []map[string]any{{"type": "text", "text": pretty(clean)}, {"type": "image", "data": data, "mimeType": mimeType}}}
 			}
 			return map[string]any{"isError": false, "structuredContent": clean, "content": []map[string]any{{"type": "image", "data": data, "mimeType": mimeType}}}
+		}
+	}
+	if name == "file_publish" || name == "diagnostic_export" {
+		payload := asMap(structured)
+		if uri, ok := payload["resource_uri"].(string); ok && uri != "" {
+			return map[string]any{"isError": false, "structuredContent": structured, "content": []map[string]any{{"type": "text", "text": pretty(structured)}, {"type": "resource_link", "uri": uri, "name": payload["filename"], "mimeType": payload["mime_type"], "description": "Immutable artifact. Read through the authenticated MCP resource reader, not repeated tool calls."}}}
 		}
 	}
 	if name == "mcp_tool_call" {

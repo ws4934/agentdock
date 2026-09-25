@@ -25,6 +25,10 @@ func patchPathInBase(basePath, rawPath string) (string, error) {
 }
 
 func (svc *Service) applyEnvelopePatch(patch string, dryRun bool, basePath string) (Result, error) {
+	return svc.applyEnvelopePatchGuarded(patch, dryRun, basePath, nil)
+}
+
+func (svc *Service) applyEnvelopePatchGuarded(patch string, dryRun bool, basePath string, guards map[string]string) (Result, error) {
 	operations, err := parseEnvelopePatch(patch)
 	if err != nil {
 		return nil, err
@@ -135,6 +139,9 @@ func (svc *Service) applyEnvelopePatch(patch string, dryRun bool, basePath strin
 	}
 	if len(affected) == 0 {
 		return nil, toolError("PATCH_FAILED", "no files were modified", "validation")
+	}
+	if err := svc.verifyPatchRevisions(basePath, staged, guards); err != nil {
+		return nil, err
 	}
 	diffPreview, diffTruncated, stats, err := stagedDiffPreview(staged, 65536)
 	if err != nil {

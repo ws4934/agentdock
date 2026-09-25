@@ -24,6 +24,7 @@ func (s *Server) appResourceDefinitions() []appResourceDefinition {
 		return nil
 	}
 	definitions := []appResourceDefinition{
+		{URI: "ui://agentdock/work-result", Name: "agentdock-work-result", Title: "Work result", Description: "Explicit read-only live work observation or immutable delivery. Manual refresh never replays a command or writes task state.", HTML: mcpapps.HTML("work_result", "Work result")},
 		{
 			URI:         protocol.ContextUIResourceURI,
 			Name:        "agentdock-context",

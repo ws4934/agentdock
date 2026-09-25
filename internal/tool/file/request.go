@@ -9,10 +9,11 @@ type RuntimeOptions struct {
 // ReadRequest 是 read_file 进入文件核心后的稳定输入契约。
 type ReadRequest struct {
 	RuntimeOptions
-	Path      string `json:"path"`
-	StartLine *int   `json:"start_line,omitempty"`
-	EndLine   *int   `json:"end_line,omitempty"`
-	MaxBytes  *int   `json:"max_bytes,omitempty"`
+	Path                 string `json:"path"`
+	StartLine            *int   `json:"start_line,omitempty"`
+	EndLine              *int   `json:"end_line,omitempty"`
+	MaxBytes             *int   `json:"max_bytes,omitempty"`
+	ExpectedReadRevision string `json:"expected_read_revision,omitempty"`
 }
 
 // ListRequest 是 list_dir 进入文件核心后的稳定输入契约。
@@ -48,20 +49,23 @@ type SearchRequest struct {
 // action 对字段组合的业务约束仍由文件服务在对应主流程中校验。
 type EditRequest struct {
 	RuntimeOptions
-	Action          string `json:"action"`
-	Path            string `json:"path,omitempty"`
-	Old             string `json:"old,omitempty"`
-	New             string `json:"new,omitempty"`
-	ReplaceAll      bool   `json:"replace_all,omitempty"`
-	ExpectedMatches *int   `json:"expected_matches,omitempty"`
-	Content         string `json:"content,omitempty"`
-	NewPath         string `json:"new_path,omitempty"`
-	Overwrite       bool   `json:"overwrite,omitempty"`
-	Recursive       bool   `json:"recursive,omitempty"`
-	Patch           string `json:"patch,omitempty"`
-	Workdir         string `json:"workdir,omitempty"`
-	DryRun          bool   `json:"dry_run,omitempty"`
-	MaxDiffBytes    *int   `json:"max_diff_bytes,omitempty"`
+	Action                      string            `json:"action"`
+	Path                        string            `json:"path,omitempty"`
+	Old                         string            `json:"old,omitempty"`
+	New                         string            `json:"new,omitempty"`
+	ReplaceAll                  bool              `json:"replace_all,omitempty"`
+	ExpectedMatches             *int              `json:"expected_matches,omitempty"`
+	Content                     string            `json:"content,omitempty"`
+	NewPath                     string            `json:"new_path,omitempty"`
+	Overwrite                   bool              `json:"overwrite,omitempty"`
+	Recursive                   bool              `json:"recursive,omitempty"`
+	Patch                       string            `json:"patch,omitempty"`
+	Workdir                     string            `json:"workdir,omitempty"`
+	DryRun                      bool              `json:"dry_run,omitempty"`
+	MaxDiffBytes                *int              `json:"max_diff_bytes,omitempty"`
+	ExpectedReadRevision        string            `json:"expected_read_revision,omitempty"`
+	ExpectedDestinationRevision string            `json:"expected_destination_revision,omitempty"`
+	ExpectedRevisions           map[string]string `json:"expected_revisions,omitempty"`
 }
 
 func intValue(value *int, fallback int) int {

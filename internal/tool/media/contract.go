@@ -53,6 +53,7 @@ func InputSchema(name string) (map[string]any, bool) {
 		return schema, true
 	case ToolFilePublish:
 		props["file"] = map[string]any{"type": "string", "format": "binary", "description": "Top-level file parameter. Connector runtimes should pass the mounted local path when available."}
+		props["delivery"] = map[string]any{"type": "string", "enum": []string{"public", "private"}, "description": "public creates a signed URL when available; private only exposes a resource link through the authenticated MCP connection. Resources support up to 64 MiB; larger files return resource_readable=false."}
 		props["path"] = stringProp("Local file or directory path visible to this AgentDock instance. Relative paths resolve from ~/AgentDock.")
 		props["retention_seconds"] = boundedIntProp("Signed URL retention seconds. Zero uses the default 86400 and values are capped at 604800.", 0, int(publicartifacts.MaxRetention/time.Second))
 	default:
@@ -77,6 +78,9 @@ func OutputSchema(name string) (map[string]any, bool) {
 		props["warnings"] = map[string]any{"type": "array", "items": map[string]any{"type": "string"}}
 	case ToolFilePublish:
 		props["artifact_id"] = stringProp("Published artifact id.")
+		props["resource_uri"] = stringProp("Immutable artifact resource URI, fetched by the authorized host.")
+		props["delivery"] = stringProp("public or private delivery mode.")
+		props["resource_readable"] = boolProp("Whether the payload fits the resource read limit.")
 		props["url"] = stringProp("Optional temporary signed download URL when a reachable base URL is available.")
 		props["expires_at"] = stringProp("Signed URL expiry timestamp.")
 		props["sha256"] = stringProp("Snapshot payload SHA-256.")

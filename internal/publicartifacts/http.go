@@ -40,7 +40,7 @@ func (s Store) ServeHTTP(w http.ResponseWriter, r *http.Request, prefix string) 
 		http.NotFound(w, r)
 		return
 	}
-	if meta.Filename != name || meta.ExpiresAt.Unix() != expires {
+	if meta.Private || meta.Filename != name || meta.ExpiresAt.Unix() != expires {
 		http.NotFound(w, r)
 		return
 	}
@@ -100,7 +100,18 @@ func (s Store) Read(artifactID string, maxBytes int64) (Metadata, []byte, error)
 		return Metadata{}, nil, fmt.Errorf("read artifact payload: %w", err)
 	}
 	defer file.Close()
-	data, err := io.ReadAll(file)
+	info, err := file.Stat()
+	if err != nil {
+		return Metadata{}, nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() != meta.Size {
+		return Metadata{}, nil, errors.New("invalid artifact payload")
+	}
+	limit := meta.Size
+	if maxBytes > 0 && maxBytes < limit {
+		limit = maxBytes
+	}
+	data, err := io.ReadAll(io.LimitReader(file, limit+1))
 	if err != nil {
 		return Metadata{}, nil, fmt.Errorf("read artifact payload: %w", err)
 	}

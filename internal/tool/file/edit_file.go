@@ -31,6 +31,9 @@ func (svc *Service) editFile(request EditRequest) (Result, error) {
 	}
 	info := read.Info
 	data := read.Data
+	if err := checkReadRevision(p.Abs, data, true, request.ExpectedReadRevision); err != nil {
+		return nil, err
+	}
 	if looksBinary(data) {
 		return nil, toolErrorDetails("BINARY_FILE", "binary file edit blocked for text tool", "validation", map[string]any{"path": p.Display})
 	}

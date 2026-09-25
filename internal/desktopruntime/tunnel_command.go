@@ -69,18 +69,18 @@ func RunTunnelCommand(ctx context.Context, args []string, stdout, stderr io.Writ
 		flags := flag.NewFlagSet("agentdock tunnel configure", flag.ContinueOnError)
 		flags.SetOutput(stderr)
 		runtimeRoot := flags.String("runtime-root", "", "AgentDock 桌面运行目录")
-		mode := flags.String("mode", "", "Tunnel 模式：none、quick 或 named")
+		mode := flags.String("mode", "", "Tunnel 模式：none、quick、named 或 secure")
 		serverURL := flags.String("server-url", "", "Named Tunnel HTTPS Origin")
 		tokenFile := flags.String("token-file", "", "临时 Tunnel Token 文件")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
 		}
 		if flags.NArg() != 0 || strings.TrimSpace(*runtimeRoot) == "" {
-			return errors.New("用法：agentdock tunnel configure --runtime-root <目录> --mode <none|quick|named> [--server-url <HTTPS Origin>] [--token-file <文件>]")
+			return errors.New("用法：agentdock tunnel configure --runtime-root <目录> --mode <none|quick|named|secure> [--server-url <HTTPS Origin>] [--token-file <文件>]")
 		}
 		normalizedMode := strings.ToLower(strings.TrimSpace(*mode))
-		if normalizedMode != "none" && normalizedMode != "quick" && normalizedMode != "named" {
-			return errors.New("tunnel configure 的 mode 必须是 none、quick 或 named")
+		if normalizedMode != "none" && normalizedMode != "quick" && normalizedMode != "named" && normalizedMode != "secure" {
+			return errors.New("tunnel configure 的 mode 必须是 none、quick、named 或 secure")
 		}
 		request := TunnelConfigureRequest{
 			RuntimeRoot: *runtimeRoot,

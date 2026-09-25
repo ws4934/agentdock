@@ -43,6 +43,9 @@ func (svc *Service) Exec(ctx context.Context, request ExecRequest) (Result, erro
 	if err != nil {
 		return nil, err
 	}
+	if request.ExecutionMode == "managed" {
+		return svc.startManaged(ctx, request, invocation, timeout)
+	}
 	executionMode, err := commandExecutionModeArg(request.ExecutionMode)
 	if err != nil {
 		return nil, err

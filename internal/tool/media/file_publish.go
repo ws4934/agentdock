@@ -11,18 +11,28 @@ import (
 )
 
 func (s *Service) FilePublish(ctx context.Context, request FilePublishRequest) (Result, error) {
+	if request.Delivery != "" && request.Delivery != "private" && request.Delivery != "public" {
+		return nil, toolError("INVALID_ARGUMENT", "delivery must be public or private", "validation")
+	}
 	pathValue, err := s.filePublishSourcePath(request)
 	if err != nil {
 		return nil, err
 	}
 	store := publicartifacts.New(s.cfg.AgentDockHome, s.cfg.OAuthServerURL, s.cfg.Port)
-	published, err := store.Publish(publicartifacts.PublishRequest{Path: pathValue, RetentionSeconds: intValue(request.RetentionSeconds, 0), BaseURL: requestmeta.BaseURL(ctx)})
+	published, err := store.Publish(publicartifacts.PublishRequest{Private: request.Delivery == "private", Path: pathValue, RetentionSeconds: intValue(request.RetentionSeconds, 0), BaseURL: requestmeta.BaseURL(ctx)})
 	if err != nil {
 		return nil, fmt.Errorf("publish file: %w", err)
 	}
 	result := Result{}
 	for key, value := range artifactResult(published) {
 		result[key] = value
+	}
+	result["resource_uri"] = publicartifacts.ResourceURI(published.ArtifactID)
+	result["delivery"] = "public"
+	result["resource_readable"] = published.Size <= publicartifacts.MaxResourceBytes
+	if request.Delivery == "private" {
+		delete(result, "url")
+		result["delivery"] = "private"
 	}
 	return result, nil
 }

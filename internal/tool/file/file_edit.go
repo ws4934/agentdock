@@ -17,12 +17,28 @@ func (svc *Service) Edit(ctx context.Context, request EditRequest) (Result, erro
 		return nil, err
 	}
 	if selection.isWSL() {
+		if request.ExpectedReadRevision != "" || request.ExpectedDestinationRevision != "" || len(request.ExpectedRevisions) > 0 {
+			return nil, toolError("REVISION_UNAVAILABLE", "WSL guarded editing is not available; do not drop a requested guard", "validation")
+		}
 		return svc.fileEditWSL(ctx, request, selection)
 	}
 
 	action := strings.ToLower(strings.TrimSpace(request.Action))
 	if action == "" {
 		return nil, toolErrorDetails("MISSING_ACTION", "file_edit requires action", "validation", map[string]any{"allowed": []string{"replace", "patch", "add", "delete", "move"}})
+	}
+	request.Action = action
+	if action != "patch" && len(request.ExpectedRevisions) > 0 {
+		return nil, toolError("INVALID_ARGUMENT", "expected_revisions is only valid for structured patches", "validation")
+	}
+	if action == "patch" && (request.ExpectedReadRevision != "" || request.ExpectedDestinationRevision != "") {
+		return nil, toolError("INVALID_ARGUMENT", "use expected_revisions for patches", "validation")
+	}
+	if action != "move" && request.ExpectedDestinationRevision != "" {
+		return nil, toolError("INVALID_ARGUMENT", "destination revision is only valid for moves", "validation")
+	}
+	if (action == "delete" || action == "move") && (request.ExpectedReadRevision != "" || request.ExpectedDestinationRevision != "") {
+		return svc.editGuardedPath(request)
 	}
 	var result Result
 	switch action {
@@ -91,6 +107,9 @@ func (svc *Service) fileEditAdd(request EditRequest) (Result, error) {
 		oldContent = string(data)
 		original = append([]byte(nil), data...)
 		mode = info.Mode().Perm()
+	}
+	if err := checkReadRevision(p.Abs, original, p.Exists, request.ExpectedReadRevision); err != nil {
+		return nil, err
 	}
 	result, changed, err := prepareTextAddition(p.Display, oldContent, content, p.Exists, request)
 	if err != nil {

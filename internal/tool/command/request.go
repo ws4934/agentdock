@@ -21,6 +21,9 @@ type ExecRequest struct {
 	MaxOutputBytes *int              `json:"max_output_bytes,omitempty"`
 	Stdin          string            `json:"stdin,omitempty"`
 	TTY            bool              `json:"tty,omitempty"`
+	RequestID      string            `json:"request_id,omitempty"`
+	TaskID         string            `json:"task_id,omitempty"`
+	Title          string            `json:"title,omitempty"`
 }
 
 // SessionObserveRequest 是 session_observe 的强类型输入。

@@ -518,3 +518,23 @@
 "Background" = "后台";
 "Revoke" = "撤销";
 "Trusted applications" = "已信任的应用";
+
+"OpenAI Secure MCP Tunnel" = "OpenAI Secure MCP Tunnel";
+"Private tunnel" = "私有通道";
+"Use an existing official OpenAI tunnel-client profile. Configure the client and workspace access first, then register it with agentdock secure-tunnel configure. This mode keeps local authentication and does not create a public URL." = "使用已配置的 OpenAI 官方 tunnel-client。先完成客户端及工作区授权，再通过 agentdock secure-tunnel configure 登记配置。本模式保留本地认证，不生成公网地址。";
+"Secure MCP Tunnel is not configured or its client changed. Run agentdock secure-tunnel configure with an existing official profile before enabling this mode." = "尚未配置 Secure MCP Tunnel，或客户端文件发生变化。请先使用 agentdock secure-tunnel configure 登记已配置的官方客户端，再启用此模式。";
+"Private tunnel · remote delivery unconfirmed" = "私有通道 · 远端交付尚未确认";
+
+"Authentication" = "认证";
+"Tunnel" = "隧道";
+"Managed jobs" = "托管任务";
+"Response delivery" = "响应交付";
+"Feedback rendering" = "反馈显示";
+"Execution completion does not prove client receipt or feedback rendering. Unknown states are not reported as healthy." = "执行完成不等于客户端已接收或反馈已显示。无法确认的状态会保留为未知，不会标记正常。";
+"Refresh diagnostics" = "刷新诊断";
+"Export safe report" = "导出安全报告";
+"Connection diagnostics" = "连接诊断";
+"Reading local diagnostics…" = "正在读取本机诊断…";
+"Local Core diagnostics are unavailable. Confirm the service is running. No logs, credentials or project files were read." = "无法读取本机 Core 诊断，请确认服务正在运行。本次未读取日志、凭据或项目文件。";
+"Diagnostics" = "诊断";
+"Tools" = "工具";

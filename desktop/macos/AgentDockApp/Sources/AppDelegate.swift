@@ -4,6 +4,8 @@ import Foundation
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let service = ServiceController()
+    private lazy var diagnosticsWindow = DiagnosticsWindowController(service: service)
+    @objc private func openDiagnostics() { diagnosticsWindow.present() }
     private lazy var computerUse = ComputerUseMonitor(runtimeRoot: ProcessInfo.processInfo.environment["AGENTDOCK_MONITOR_RUNTIME_ROOT"].map { URL(fileURLWithPath: $0) } ?? service.paths.appSupport)
     private let menuLoginAgent = MenuLoginAgentController()
     private let launchedInBackground = CommandLine.arguments.contains("--background")
@@ -451,6 +453,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(item(currentStatus.installed ? L10n.text("Open AgentDock") : L10n.text("Set up AgentDock…"), #selector(showSetup)))
         menu.addItem(item(L10n.text("Check permissions"), #selector(openPermissions)))
         menu.addItem(computerUse.trustedApplicationsMenuItem())
+        menu.addItem(item(L10n.text("Connection diagnostics"), #selector(openDiagnostics)))
         if currentStatus.installed {
             menu.addItem(.separator())
 

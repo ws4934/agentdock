@@ -4,12 +4,14 @@ enum TunnelMode: String, CaseIterable {
     case local = "none"
     case quick
     case named
+    case secure
 
     var title: String {
         switch self {
         case .local: return L10n.text("Local only")
         case .quick: return L10n.text("Temporary public access")
         case .named: return L10n.text("Use your own Cloudflare domain")
+        case .secure: return L10n.text("OpenAI Secure MCP Tunnel")
         }
     }
 
@@ -21,6 +23,8 @@ enum TunnelMode: String, CaseIterable {
             return L10n.text("Automatically generate a temporary public address through Cloudflare without configuring a domain. Suitable for temporary access or testing; the address may change.")
         case .named:
             return L10n.text("Use your own HTTPS domain through Cloudflare Tunnel. Once configured, the public address remains stable.")
+        case .secure:
+            return L10n.text("Use an existing official OpenAI tunnel-client profile. Configure the client and workspace access first, then register it with agentdock secure-tunnel configure. This mode keeps local authentication and does not create a public URL.")
         }
     }
 }

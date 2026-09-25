@@ -18,6 +18,13 @@ trap cleanup EXIT
 
 python3 "$ROOT_DIR/scripts/test/check-macos-i18n.py"
 
+swiftc -swift-version 5 -parse-as-library \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/Localization.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/SafeDiagnostics.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Tests/SafeDiagnosticsTests.swift" \
+  -o "$TMP_ROOT/safe-diagnostics-tests"
+"$TMP_ROOT/safe-diagnostics-tests"
+
 monitor_sources=(
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/Localization.swift"
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ComputerUseTransport.swift"
@@ -164,6 +171,15 @@ chmod 0755 "$payload_dir/$cloudflared_binary"
   shasum -a 256 "$cloudflared_binary" > "$cloudflared_binary.sha256"
 )
 
+cat > "$TMP_ROOT/gopls.go" <<'GO'
+package main
+import "fmt"
+func main() { fmt.Println("golang.org/x/tools/gopls fixture") }
+GO
+CGO_ENABLED=0 GOOS=darwin GOARCH="$release_arch" go build -trimpath -o "$payload_dir/gopls_darwin_$release_arch" "$TMP_ROOT/gopls.go"
+(cd "$payload_dir"; shasum -a 256 "gopls_darwin_$release_arch" > "gopls_darwin_$release_arch.sha256")
+printf 'Isolated test fixture; not a production language server.\n' > "$payload_dir/gopls-NOTICES.txt"
+
 AGENTDOCK_MACOS_ARCHES="$(uname -m)" \
 AGENTDOCK_MACOS_APP_OUTPUT_DIR="$TMP_ROOT/output" \
 AGENTDOCK_MACOS_OFFLINE_PAYLOAD_DIR="$payload_dir" \
@@ -188,6 +204,11 @@ TUNNEL_AGENT_PLIST="$APP/Contents/Library/LaunchAgents/com.uvwt.agentdock.tunnel
 MENU_AGENT_PLIST="$APP/Contents/Library/LaunchAgents/com.uvwt.agentdock.menu-login.plist"
 test -x "$CORE_HELPER"
 test -x "$CLOUDFLARED_HELPER"
+test -x "$APP/Contents/Helpers/gopls"
+test -f "$APP/Contents/Resources/gopls-NOTICES.txt"
+gopls_signature="$(codesign -d --verbose=2 "$APP/Contents/Helpers/gopls" 2>&1)"
+grep -q '^Identifier=com.uvwt.agentdock.gopls$' <<< "$gopls_signature"
+test "$("$APP/Contents/Helpers/gopls" version)" = "golang.org/x/tools/gopls fixture"
 test -f "$APP/Contents/Resources/core-skills/manifest.json"
 test -f "$CORE_AGENT_PLIST"
 test -f "$TUNNEL_AGENT_PLIST"

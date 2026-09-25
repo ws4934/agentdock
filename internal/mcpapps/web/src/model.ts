@@ -30,6 +30,7 @@ export interface Model {
   link?: { url: string; expires?: string };
   tabs?: { id: string; title: string; summary: string; groups: Group[] }[];
   empty?: boolean;
+  refresh?: Data;
 }
 export type Normalizer = (data: Data, locale: Locale) => Model;
 export const object = (value: unknown): Data =>

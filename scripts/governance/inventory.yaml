@@ -98,6 +98,7 @@ scripts:
     owner: desktop
     public_contract: false
     deletable: false
+    oversize_justification: 同一隔离目录内编译原生界面用例并核对 App、可选 gopls Helper、签名、ZIP/DMG 和挂载内容，统一清理保障不触碰实际安装。
 
   - path: scripts/test/test-docker-images.sh
     class: test

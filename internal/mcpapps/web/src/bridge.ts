@@ -157,6 +157,44 @@ export function start(view: string, normalize: Normalizer): void {
     reconnect: () => {
       void reconnect();
     },
+    refresh: async (request) => {
+      if (view !== "work_result" || !connected || !app || ended)
+        throw new Error("readonly refresh unavailable");
+      const current = generation;
+      const initialSnapshot = store.get();
+      const allowed = new Set([
+        "task_id",
+        "workdir",
+        "job_ids",
+        "artifact_ids",
+        "source_paths",
+      ]);
+      if (
+        Object.keys(request).some((k) => !allowed.has(k)) ||
+        typeof request.task_id !== "string" ||
+        typeof request.workdir !== "string"
+      )
+        throw new Error("invalid refresh scope");
+      const result = await app.callServerTool(
+        { name: "work_result_read", arguments: request },
+        { timeout: 30000 },
+      );
+      if (ended || current !== generation) return;
+      // Do not overwrite a newer host result (or another selected delivery) with
+      // an older in-flight refresh response from the same connection.
+      if (store.get() !== initialSnapshot)
+        throw new Error("refresh was superseded");
+      if (result.isError) throw new Error("readonly refresh failed");
+      const projection = object(object(result.structuredContent).work_result);
+      if (
+        object(projection.task).id !== request.task_id ||
+        projection.workdir !== request.workdir ||
+        projection.frozen === true
+      )
+        throw new Error("refresh scope changed");
+      store.result(result);
+      size();
+    },
     open: async (url) => {
       if (!connected || !app || !safeURL(url))
         throw new Error("link unavailable");

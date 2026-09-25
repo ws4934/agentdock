@@ -518,3 +518,23 @@
 "Background" = "Background";
 "Revoke" = "Revoke";
 "Trusted applications" = "Trusted applications";
+
+"OpenAI Secure MCP Tunnel" = "OpenAI Secure MCP Tunnel";
+"Private tunnel" = "Private tunnel";
+"Use an existing official OpenAI tunnel-client profile. Configure the client and workspace access first, then register it with agentdock secure-tunnel configure. This mode keeps local authentication and does not create a public URL." = "Use an existing official OpenAI tunnel-client profile. Configure the client and workspace access first, then register it with agentdock secure-tunnel configure. This mode keeps local authentication and does not create a public URL.";
+"Secure MCP Tunnel is not configured or its client changed. Run agentdock secure-tunnel configure with an existing official profile before enabling this mode." = "Secure MCP Tunnel is not configured or its client changed. Run agentdock secure-tunnel configure with an existing official profile before enabling this mode.";
+"Private tunnel · remote delivery unconfirmed" = "Private tunnel · remote delivery unconfirmed";
+
+"Authentication" = "Authentication";
+"Tunnel" = "Tunnel";
+"Managed jobs" = "Managed jobs";
+"Response delivery" = "Response delivery";
+"Feedback rendering" = "Feedback rendering";
+"Execution completion does not prove client receipt or feedback rendering. Unknown states are not reported as healthy." = "Execution completion does not prove client receipt or feedback rendering. Unknown states are not reported as healthy.";
+"Refresh diagnostics" = "Refresh diagnostics";
+"Export safe report" = "Export safe report";
+"Connection diagnostics" = "Connection diagnostics";
+"Reading local diagnostics…" = "Reading local diagnostics…";
+"Local Core diagnostics are unavailable. Confirm the service is running. No logs, credentials or project files were read." = "Local Core diagnostics are unavailable. Confirm the service is running. No logs, credentials or project files were read.";
+"Diagnostics" = "Diagnostics";
+"Tools" = "Tools";

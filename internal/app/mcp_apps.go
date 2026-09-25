@@ -9,6 +9,9 @@ type UIBinding struct {
 }
 
 var toolUIBindings = map[string]UIBinding{
+	"work_result_read":         {ResourceURI: "ui://agentdock/work-result"},
+	"work_result_freeze":       {ResourceURI: "ui://agentdock/work-result"},
+	"diagnostic_export":        {ResourceURI: protocol.ArtifactUIResourceURI},
 	"agentdock_context":        {ResourceURI: protocol.ContextUIResourceURI},
 	"file_edit":                {ResourceURI: protocol.FileChangeUIResourceURI},
 	"task_manage":              {ResourceURI: protocol.TaskProgressUIResourceURI},

@@ -49,6 +49,7 @@ final class InstallerRunner {
         let providedTunnelToken = try request.validatedTunnelToken()
         try validateBundledRuntime()
         try service.validatePersistentAppLocation()
+        if request.mode == .secure { try await service.validateSecureTunnelSetup() }
 
         // 旧桌面版把 Named Tunnel Token 放在 cloudflared.env。先迁入独立 token store，
         // 后面的运行时清理只删除程序入口，不触碰用户凭据。
@@ -96,7 +97,7 @@ final class InstallerRunner {
 
             let publicURL: String
             switch request.mode {
-            case .local:
+            case .local, .secure:
                 publicURL = ""
             case .named:
                 publicURL = serverURL ?? ""
@@ -196,7 +197,7 @@ final class InstallerRunner {
         var tunnelValues = ["AGENTDOCK_TUNNEL_MODE": request.mode.rawValue]
         var tunnelToken: String?
         switch request.mode {
-        case .local:
+        case .local, .secure:
             values.removeValue(forKey: "AGENTDOCK_SERVER_URL")
             values["AGENTDOCK_OAUTH_ENABLED"] = "false"
         case .quick:

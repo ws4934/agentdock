@@ -113,7 +113,7 @@ func TestExecCommandInputSchemaPublishesExecutionModes(t *testing.T) {
 		t.Fatalf("execution_mode schema = %#v", properties["execution_mode"])
 	}
 	values, ok := mode["enum"].([]string)
-	if !ok || len(values) != 3 || values[0] != "auto" || values[1] != "sync" || values[2] != "async" {
+	if !ok || len(values) != 4 || values[0] != "auto" || values[1] != "sync" || values[2] != "async" || values[3] != "managed" {
 		t.Fatalf("execution_mode enum = %#v", mode["enum"])
 	}
 	if _, exists := properties["wait_until_exit"]; exists {

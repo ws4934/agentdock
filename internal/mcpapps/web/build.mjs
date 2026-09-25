@@ -20,6 +20,7 @@ const views = {
   recall: ["recall", "recall", "agentdock.recall.v1"],
   workflow: ["workflow", "workflow", "agentdock.workflow.v1"],
   acp_status: ["acp", "acp-status", "agentdock.acp-status.v1"],
+  work_result: ["work", "work-result", "agentdock.work-result.v1"],
 };
 const check = process.argv.includes("--check");
 const css = (
@@ -91,5 +92,5 @@ console.log(JSON.stringify(manifest, null, 2));
 console.log(
   check
     ? "Generated UI matches source."
-    : "Built eight self-contained MCP App views.",
+    : `Built ${Object.keys(views).length} self-contained MCP App views.`,
 );
