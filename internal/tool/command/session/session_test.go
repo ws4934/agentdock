@@ -70,7 +70,7 @@ func TestStartCapturesFastCommandOutputRepeatedly(t *testing.T) {
 			"printf 'fast-output'",
 			t.TempDir(),
 			os.Environ(),
-			time.Second,
+			10*time.Second, // 检查输出回收而非一秒内的调度性能；超时行为另有专门用例。
 			nil,
 		)
 		if err != nil {

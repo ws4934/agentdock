@@ -116,7 +116,7 @@ func (s *Server) registerAppResources() {
 
 	for _, definition := range s.appResourceDefinitions() {
 		definition := definition
-		meta := appResourceMeta(widgetDomain)
+		meta := appResourceMetaForDefinition(definition, widgetDomain)
 		s.sdk.AddResource(&mcpsdk.Resource{
 			URI:         definition.URI,
 			Name:        definition.Name,
@@ -144,7 +144,7 @@ func (s *Server) ReadAppResource(uri string) (map[string]any, error) {
 		if definition.URI != uri {
 			continue
 		}
-		meta := appResourceMeta(appWidgetDomain(s.cfg.OAuthServerURL))
+		meta := appResourceMetaForDefinition(definition, appWidgetDomain(s.cfg.OAuthServerURL))
 		return map[string]any{
 			"contents": []any{map[string]any{
 				"uri": definition.URI, "mimeType": protocol.MCPAppMIMEType, "text": definition.HTML, "_meta": meta,
@@ -159,8 +159,17 @@ func appResourceReadResult(definition appResourceDefinition, widgetDomain string
 		URI:      definition.URI,
 		MIMEType: protocol.MCPAppMIMEType,
 		Text:     definition.HTML,
-		Meta:     appResourceMeta(widgetDomain),
+		Meta:     appResourceMetaForDefinition(definition, widgetDomain),
 	}}}
+}
+
+func appResourceMetaForDefinition(definition appResourceDefinition, widgetDomain string) mcpsdk.Meta {
+	meta := appResourceMeta(widgetDomain)
+	if definition.Name == "agentdock-work-result" {
+		meta["openai/ui"] = map[string]any{"availableDisplayModes": []string{"inline", "fullscreen", "pip"}}
+		meta["openai/widgetDescription"] = "A task observation with optional host-controlled floating/fullscreen display, read-only refresh and an explicit user continuation request. Reopen tasks from the native Task center; never replay completed work."
+	}
+	return meta
 }
 
 func appResourceMeta(widgetDomain string) mcpsdk.Meta {

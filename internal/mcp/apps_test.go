@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -41,7 +42,7 @@ func assertToolUIResource(t *testing.T, tool *mcpsdk.Tool, uri string, allowedMe
 	}
 }
 
-func assertResourceUIMeta(t *testing.T, meta mcpsdk.Meta, domain string) {
+func assertResourceUIMeta(t *testing.T, meta mcpsdk.Meta, domain string, workResult ...bool) {
 	t.Helper()
 	ui, ok := meta["ui"].(map[string]any)
 	if !ok || ui["prefersBorder"] != true {
@@ -58,7 +59,15 @@ func assertResourceUIMeta(t *testing.T, meta mcpsdk.Meta, domain string) {
 	} else if ui["domain"] != domain {
 		t.Fatalf("resource domain metadata = %#v", meta)
 	}
-	if len(meta) != 1 {
+	if len(workResult) == 1 && workResult[0] {
+		encoded, err := json.Marshal(meta["openai/ui"])
+		if err != nil || string(encoded) != `{"availableDisplayModes":["inline","fullscreen","pip"]}` || len(meta) != 3 {
+			t.Fatalf("work-result display contract: %#v", meta)
+		}
+		if description, ok := meta["openai/widgetDescription"].(string); !ok || description == "" {
+			t.Fatal("missing work-result description")
+		}
+	} else if len(meta) != 1 {
 		t.Fatalf("resource should expose only standard ui metadata: %#v", meta)
 	}
 }

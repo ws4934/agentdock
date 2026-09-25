@@ -9,6 +9,7 @@ import {
 } from "./model";
 import { Store } from "./store";
 import { mount } from "./ui";
+import { hostPresentation, inlinePresentation, continuationPrompt, isDisplayMode } from "./presentation";
 
 export function start(view: string, normalize: Normalizer): void {
   const root = document.getElementById("content")!;
@@ -24,6 +25,8 @@ export function start(view: string, normalize: Normalizer): void {
     lastHeight = 0,
     hostTheme = "";
   let observer: ResizeObserver | undefined;
+  let displayBusy = false;
+  let continuationAttempted: string | undefined;
   const variables = new Set([
     "--font-sans",
     "--color-text-primary",
@@ -53,12 +56,19 @@ export function start(view: string, normalize: Normalizer): void {
     }
     theme();
     document.documentElement.lang = store.get().locale;
+    if (view === "work_result") {
+      const presentation = hostPresentation(c, app?.getHostCapabilities(), store.get().presentation);
+      store.setPresentation(presentation);
+      document.documentElement.dataset.displayMode = presentation.mode;
+    }
   }
   function size() {
     if (!connected || ended || frame) return;
+    if (store.get().presentation?.mode && store.get().presentation?.mode !== "inline") return;
     frame = requestAnimationFrame(() => {
       frame = 0;
       if (!connected || ended) return;
+      if (store.get().presentation?.mode && store.get().presentation?.mode !== "inline") return;
       const height = Math.ceil(root.getBoundingClientRect().height);
       if (height > 0 && height !== lastHeight) {
         lastHeight = height;
@@ -69,6 +79,10 @@ export function start(view: string, normalize: Normalizer): void {
   async function reconnect() {
     const id = ++generation;
     connected = false;
+    if (view === "work_result") {
+      store.setPresentation(inlinePresentation());
+      document.documentElement.dataset.displayMode = "inline";
+    }
     lastHeight = 0;
     if (frame) {
       cancelAnimationFrame(frame);
@@ -80,7 +94,7 @@ export function start(view: string, normalize: Normalizer): void {
     // SDK 负责协议校验和握手；尺寸观察由本组件管理，销毁时明确回收。
     const next = new App(
       { name: "agentdock-" + view, version: "2.0.0" },
-      {},
+      view === "work_result" ? { availableDisplayModes: ["inline", "fullscreen", "pip"] } : {},
       { autoResize: false },
     );
     app = next;
@@ -167,6 +181,29 @@ export function start(view: string, normalize: Normalizer): void {
   const unmount = mount(root, store, {
     reconnect: () => {
       void reconnect();
+    },
+    displayMode: async (mode) => {
+      if (view !== "work_result" || !connected || !app || ended || displayBusy || !isDisplayMode(mode) || !store.get().presentation?.modes.includes(mode))
+        throw new Error("display mode unavailable");
+      const current = generation;
+      displayBusy = true;
+      try {
+        const result = await app.requestDisplayMode({ mode }, { timeout: 8000 });
+        if (ended || current !== generation) throw new Error("display response expired");
+        context({ displayMode: result.mode });
+        lastHeight = 0; size();
+        return result.mode;
+      } finally { displayBusy = false; }
+    },
+    continueTask: async (id) => {
+      const task = store.get().model?.task;
+      if (view !== "work_result" || !connected || !app || ended || !store.get().presentation?.canMessage || !task?.canContinue || task.id !== id || continuationAttempted === id)
+        throw new Error("continuation unavailable");
+      // 先标记尝试；断线或超时也不自动重放用户消息。
+      continuationAttempted = id;
+      const current = generation;
+      const result = await app.sendMessage({ role: "user", content: [{ type: "text", text: continuationPrompt(id, store.get().locale) }] }, { timeout: 8000 });
+      if (ended || current !== generation || result.isError) throw new Error("continuation not confirmed");
     },
     refresh: async (request) => {
       if (view !== "work_result" || !connected || !app || ended)

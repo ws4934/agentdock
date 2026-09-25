@@ -17,18 +17,18 @@ func TestMacOSSetupWindowUsesResponsiveScrollableLayout(t *testing.T) {
 
 	for _, want := range []string{
 		`styleMask: [.titled, .closable, .miniaturizable, .resizable]`,
-		`window.minSize = NSSize(width: 620, height: 420)`,
+		`window.setFrameAutosaveName("AgentDockManagement")`,
 		`private let scrollDocumentView = TopAlignedDocumentView()`,
 		`let scrollView = NSScrollView()`,
 		`scrollView.hasVerticalScroller = true`,
 		`scrollView.documentView = scrollDocumentView`,
 		`scrollDocumentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor)`,
-		`let footerSpacer = NSView()`,
-		`footerSpacer.heightAnchor.constraint(equalToConstant: 8)`,
+		`scrollView.topAnchor.constraint(equalTo: fixedHeader.bottomAnchor`,
+		`scrollView.bottomAnchor.constraint(equalTo: footer.topAnchor`,
 		`contentStack.leadingAnchor.constraint(equalTo: scrollDocumentView.leadingAnchor, constant: 28)`,
 		`contentStack.bottomAnchor.constraint(equalTo: scrollDocumentView.bottomAnchor, constant: -22)`,
-		`let visibleFrame = (window.screen ?? NSScreen.main)?.visibleFrame`,
-		`let installedHeight: CGFloat = selectedMode == .named ? 620 : 580`,
+		`L10n.text("Task center")`,
+		`L10n.text("Connection settings")`,
 		`publicAddress.lineBreakMode = .byCharWrapping`,
 		`publicAddress.maximumNumberOfLines = 2`,
 		`L10n.text("Check permissions")`,
@@ -54,6 +54,7 @@ func TestMacOSSetupWindowUsesResponsiveScrollableLayout(t *testing.T) {
 	}
 
 	for _, forbidden := range []string{
+		`window.setFrame(frame, display: true, animate: window.isVisible)`,
 		`widthAnchor.constraint(equalToConstant: 564)`,
 		`publicCheckStatus.widthAnchor.constraint(equalToConstant: 450)`,
 		`serverURLField.widthAnchor.constraint(equalToConstant: 430)`,

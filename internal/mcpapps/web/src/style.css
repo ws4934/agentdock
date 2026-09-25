@@ -54,6 +54,22 @@ button {
   padding: 16px 18px;
   overflow-wrap: anywhere;
 }
+.work-controls {
+  margin: -4px 0 14px;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.work-controls-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.work-controls button { border: 1px solid var(--line); border-radius: 7px; padding: 5px 9px; background: var(--subtle); font-size: 12px; }
+.work-controls .continue-task { background: var(--fg); color: var(--surface); }
+.task-id { font-size: 11px; color: var(--muted); margin-right: auto; user-select: all; }
+.resume-prompt { width: 100%; resize: vertical; padding: 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--fg); background: var(--subtle); font: inherit; font-size: 12px; }
+:root[data-display-mode="pip"] .card,
+:root[data-display-mode="fullscreen"] .card { height: 100dvh; overflow: auto; background: var(--surface); }
+:root[data-display-mode="pip"] .work-controls,
+:root[data-display-mode="fullscreen"] .work-controls { position: sticky; top: -16px; z-index: 1; }
+:root[data-display-mode="fullscreen"] .card { padding: 24px max(24px, calc((100vw - 1040px) / 2)); }
 header {
   display: flex;
   align-items: flex-start;

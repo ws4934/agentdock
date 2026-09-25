@@ -40,9 +40,16 @@ func (s *Store) Delete(id string) (Task, error) {
 }
 
 func (s *Store) List(status Status, limit int) ([]Task, error) {
+	tasks, _, err := s.ListPage(status, limit)
+	return tasks, err
+}
+
+// ListPage exposes omitted or unreadable entries instead of presenting a bounded
+// preview as a complete inventory. It never changes task progress.
+func (s *Store) ListPage(status Status, limit int) ([]Task, bool, error) {
 	release, err := s.acquireStoreLock()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer release()
 	if limit <= 0 || limit > 200 {
@@ -50,9 +57,10 @@ func (s *Store) List(status Status, limit int) ([]Task, error) {
 	}
 	entries, err := os.ReadDir(s.root)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	tasks := make([]Task, 0, len(entries))
+	partial := false
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "tsk_") || filepath.Ext(entry.Name()) != ".json" {
 			continue
@@ -60,22 +68,30 @@ func (s *Store) List(status Status, limit int) ([]Task, error) {
 		data, err := readTaskStateFile(filepath.Join(s.root, entry.Name()))
 		if err != nil {
 			slog.Warn("skip unreadable task state", "file", entry.Name(), "error", err)
+			partial = true
 			continue
 		}
 		task, err := decodeTask(data, entry.Name())
 		if err != nil {
 			slog.Warn("skip invalid task state", "file", entry.Name(), "error", err)
+			partial = true
 			continue
 		}
 		if status == "" || task.Status == status {
 			tasks = append(tasks, task)
 		}
 	}
-	sort.Slice(tasks, func(i, j int) bool { return tasks[i].UpdatedAt.After(tasks[j].UpdatedAt) })
+	sort.Slice(tasks, func(i, j int) bool {
+		if tasks[i].UpdatedAt.Equal(tasks[j].UpdatedAt) {
+			return tasks[i].ID < tasks[j].ID
+		}
+		return tasks[i].UpdatedAt.After(tasks[j].UpdatedAt)
+	})
 	if len(tasks) > limit {
 		tasks = tasks[:limit]
+		partial = true
 	}
-	return tasks, nil
+	return tasks, partial, nil
 }
 
 func (s *Store) loadLocked(id string) (Task, error) {

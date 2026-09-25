@@ -51,7 +51,12 @@ func (r *Runtime) RuntimeTasks(status string, limit int) (Result, error) {
 }
 
 func (r *Runtime) RuntimeTask(id string) (Result, error) {
-	return r.taskTools.RuntimeTask(id)
+	result, err := r.taskTools.RuntimeTask(id)
+	if err != nil {
+		return nil, err
+	}
+	r.addTaskReceipts(result, id)
+	return result, nil
 }
 
 func (r *Runtime) RuntimeTaskDelete(id string) (Result, error) {

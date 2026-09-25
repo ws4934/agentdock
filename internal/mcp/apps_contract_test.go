@@ -49,7 +49,7 @@ func TestMCPAppsResourceContractMatrix(t *testing.T) {
 					t.Fatalf("duplicate resource %s", r.URI)
 				}
 				available[r.URI] = true
-				assertResourceUIMeta(t, r.Meta, "https://dock.example.test")
+				assertResourceUIMeta(t, r.Meta, "https://dock.example.test", r.Name == "agentdock-work-result")
 				read, err := h.session.ReadResource(t.Context(), &mcpsdk.ReadResourceParams{URI: r.URI})
 				if err != nil {
 					t.Fatal(err)
@@ -57,13 +57,14 @@ func TestMCPAppsResourceContractMatrix(t *testing.T) {
 				if len(read.Contents) != 1 || read.Contents[0].URI != r.URI || read.Contents[0].MIMEType != "text/html;profile=mcp-app" {
 					t.Fatalf("invalid resource result %s", r.URI)
 				}
-				assertResourceUIMeta(t, read.Contents[0].Meta, "https://dock.example.test")
+				assertResourceUIMeta(t, read.Contents[0].Meta, "https://dock.example.test", r.Name == "agentdock-work-result")
 				// 桥接与直连必须服务同一份不可变产物。
 				bridge, err := h.server.ReadAppResource(r.URI)
 				if err != nil {
 					t.Fatal(err)
 				}
 				content := bridge["contents"].([]any)[0].(map[string]any)
+				assertResourceUIMeta(t, content["_meta"].(mcpsdk.Meta), "https://dock.example.test", r.Name == "agentdock-work-result")
 				if content["text"] != read.Contents[0].Text || content["uri"] != r.URI {
 					t.Fatalf("bridge drift for %s", r.URI)
 				}

@@ -24,6 +24,12 @@ import (
 const browserHost = `<!doctype html><meta charset="utf-8"><style>body{margin:0;background:#fafafa}iframe{width:100%%;height:120px;border:0;display:block}</style><iframe sandbox="allow-scripts allow-same-origin"></iframe><script>
 const frame=document.querySelector('iframe'); let mode=%s; const html=%s, data=%s;
 window.messages=[];window.errors=[];window.refreshMode='success';window.pendingRefresh=null;
+window.displayBehavior='requested';window.messageBehavior='accept';window.displayMode='inline';
+if(mode==='interactive'){
+ data.work_result.task.id='tsk_0123456789abcdef';data.work_result.task.status='active';
+ data.work_result.selection.task_id=data.work_result.task.id;
+ data.work_result.task.steps=[{id:'verify',title:'Validate without replay',status:'in_progress'}];
+}
 window.send=(method,params)=>frame.contentWindow.postMessage({jsonrpc:'2.0',method,params},'*');
 window.result=d=>send('ui/notifications/tool-result',{structuredContent:d,content:[]});
 window.replyRefresh=(request)=>{
@@ -39,6 +45,11 @@ window.addEventListener('message',e=>{
  if(m.method==='ui/initialize'){
   if(mode==='timeout')return;
   const reply=mode==='init-error'?{error:{code:-32000,message:'Synthetic init error'}}:{result:{protocolVersion:'2026-01-26',hostInfo:{name:'isolated-test-host',version:'1.0'},hostCapabilities:{openLinks:{},serverTools:{}},hostContext:{theme:'light',locale:'zh-CN'}}};
+  if(mode==='interactive'){
+   reply.result.hostCapabilities.message={text:{}};
+   reply.result.hostContext.availableDisplayModes=['inline','fullscreen','pip'];
+   reply.result.hostContext.displayMode='inline';
+  }
   frame.contentWindow.postMessage({jsonrpc:'2.0',id:m.id,...reply},'*');
  }
  if(m.method==='ui/notifications/initialized'){
@@ -49,7 +60,14 @@ window.addEventListener('message',e=>{
   if(mode==='empty'){send('ui/notifications/tool-result',{content:[]});return;}
   result(data);
  }
- if(m.method==='ui/notifications/size-changed')frame.style.height=m.params.height+'px';
+ if(m.method==='ui/notifications/size-changed'&&displayMode==='inline')frame.style.height=m.params.height+'px';
+ if(m.method==='ui/request-display-mode'){
+  if(displayBehavior==='deny'){frame.contentWindow.postMessage({jsonrpc:'2.0',id:m.id,error:{code:-32000,message:'Synthetic mode denial'}},'*');return;}
+  displayMode=displayBehavior==='fullscreen'?'fullscreen':m.params.mode;
+  frame.style.cssText=displayMode==='pip'?'position:fixed;right:12px;bottom:12px;width:360px;height:360px;z-index:2;background:white':displayMode==='fullscreen'?'position:fixed;inset:0;width:100vw;height:100vh;z-index:2;background:white':'';
+  frame.contentWindow.postMessage({jsonrpc:'2.0',id:m.id,result:{mode:displayMode}},'*');
+ }
+ if(m.method==='ui/message')frame.contentWindow.postMessage({jsonrpc:'2.0',id:m.id,result:{isError:messageBehavior==='deny'}},'*');
  if(m.method==='ui/open-link')frame.contentWindow.postMessage({jsonrpc:'2.0',id:m.id,result:{}},'*');
  if(m.method==='tools/call'){
   if(m.params.name!=='work_result_read'){errors.push('Unexpected mutation tool');return;}
@@ -317,6 +335,59 @@ func TestFeedbackBrowser(t *testing.T) {
 	eval(`newer.work_result.frozen=true;newer.work_result.result_id='frozen-fixture';result(newer)`)
 	run(chromedp.Poll(`!`+doc+`.querySelector('.refresh-result')`, nil))
 	check(`messages.filter(m=>m.method==='tools/call').every(m=>m.params.name==='work_result_read')`)
+
+	// 宿主决定悬浮/全屏和页面滚动；组件不触碰父页面，消息必须显式点击且不自动重放。
+	run(chromedp.EmulateViewport(960, 800))
+	open("work_result", "interactive")
+	ready()
+	run(chromedp.Poll(`!!`+doc+`.querySelector('[data-display="pip"]')`, nil))
+	eval(doc + `.querySelector('[data-display="pip"]').click()`)
+	run(chromedp.Poll(doc+`.documentElement.dataset.displayMode==='pip'`, nil))
+	eval(`document.body.style.height='3000px';window.scrollTo(0,1600)`)
+	check(`window.scrollY>1000 && frame.getBoundingClientRect().bottom<=innerHeight && frame.getBoundingClientRect().top>0`)
+	check(doc + `.documentElement.scrollWidth<=360`)
+	eval(doc + `.querySelector('.resume-help').click()`)
+	run(chromedp.Poll(`!!`+doc+`.querySelector('.resume-prompt')`, nil))
+	check(doc + `.querySelector('.resume-prompt').value.includes('tsk_0123456789abcdef')`)
+	eval(doc + `.querySelector('[data-display="inline"]').click()`)
+	run(chromedp.Poll(doc+`.documentElement.dataset.displayMode==='inline'`, nil))
+	eval(`displayBehavior='fullscreen'`)
+	eval(doc + `.querySelector('[data-display="pip"]').click()`)
+	run(chromedp.Poll(doc+`.documentElement.dataset.displayMode==='fullscreen'`, nil))
+	check(`frame.getBoundingClientRect().height===innerHeight`)
+	eval(`displayBehavior='requested'`)
+	eval(doc + `.querySelector('[data-display="inline"]').click()`)
+	run(chromedp.Poll(doc+`.documentElement.dataset.displayMode==='inline'`, nil))
+	eval(`displayBehavior='deny'`)
+	eval(doc + `.querySelector('[data-display="fullscreen"]').click()`)
+	run(chromedp.Poll(doc+`.body.innerText.includes('宿主未确认显示切换')`, nil))
+	check(doc + `.documentElement.dataset.displayMode==='inline'`)
+	eval(doc + `.querySelector('.continue-task').click();` + doc + `.querySelector('.continue-task').click()`)
+	run(chromedp.Poll(doc+`.body.innerText.includes('续接请求已交给宿主')`, nil))
+	check(`messages.filter(m=>m.method==='ui/message').length===1 && !messages.some(m=>m.method==='tools/call')`)
+	check(`messages.find(m=>m.method==='ui/message').params.role==='user'`)
+	check(doc + `.querySelector('.continue-task').disabled`)
+	if dir := os.Getenv("AGENTDOCK_UI_SCREENSHOTS"); dir != "" {
+		eval(`displayBehavior='requested';window.scrollTo(0,0)`)
+		eval(doc + `.querySelector('[data-display="pip"]').click()`)
+		run(chromedp.Poll(doc+`.documentElement.dataset.displayMode==='pip'`, nil))
+		var image []byte
+		run(chromedp.CaptureScreenshot(&image))
+		if err := os.WriteFile(filepath.Join(dir, "work-result-pip.png"), image, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	open("work_result", "interactive")
+	ready()
+	run(chromedp.Poll(`!!`+doc+`.querySelector('.continue-task')`, nil))
+	eval(`messageBehavior='deny'`)
+	eval(doc + `.querySelector('.continue-task').click()`)
+	run(chromedp.Poll(doc+`.body.innerText.includes('无法确认续接消息是否送达')`, nil))
+	check(doc + `.querySelector('.continue-task').disabled`)
+	check(`messages.filter(m=>m.method==='ui/message').length===1 && !messages.some(m=>m.method==='tools/call')`)
+	eval(`teardown()`)
+	run(chromedp.Poll(doc+`.URL==='about:blank'`, nil))
+	check(`frame.contentWindow.__audit===undefined`)
 
 	// 同一页面同时承载九类卡片：记录冷挂载耗时，并检查全部卡片闲置后不再发消息。
 	run(chromedp.EmulateViewport(960, 900))

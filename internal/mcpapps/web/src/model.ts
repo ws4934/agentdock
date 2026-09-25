@@ -31,6 +31,7 @@ export interface Model {
   tabs?: { id: string; title: string; summary: string; groups: Group[] }[];
   empty?: boolean;
   refresh?: Data;
+  task?: { id: string; canContinue: boolean };
 }
 export type Normalizer = (data: Data, locale: Locale) => Model;
 export const object = (value: unknown): Data =>

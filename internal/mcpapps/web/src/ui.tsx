@@ -9,8 +9,10 @@ import {
   tr,
 } from "./model";
 import { type Store, type Snapshot } from "./store";
+import { WorkControls, type WorkActions } from "./work-controls";
+import { type Presentation, inlinePresentation } from "./presentation";
 
-export interface Actions {
+export interface Actions extends WorkActions {
   reconnect(): void;
   open(url: string): Promise<void>;
   refresh?(request: Data): Promise<void>;
@@ -105,10 +107,12 @@ function Card({
   model: m,
   locale: l,
   actions,
+  presentation,
 }: {
   model: Model;
   locale: Locale;
   actions: Actions;
+  presentation: Presentation;
 }) {
   const [expanded, setExpanded] = useState(false),
     [selected, setSelected] = useState(""),
@@ -171,6 +175,7 @@ function Card({
   }
   return (
     <article class="card" data-tone={m.tone ?? "neutral"} data-entity={m.id}>
+      {m.task && <WorkControls key={m.task.id} model={m} locale={l} presentation={presentation} actions={actions} />}
       <header>
         <div class="title-row">
           <span class="indicator" aria-hidden="true">
@@ -304,7 +309,7 @@ function Feedback({
   const l = s.locale;
   if (s.model)
     return (
-      <Card key={s.model.id} model={s.model} locale={l} actions={actions} />
+      <Card key={s.model.id} model={s.model} locale={l} actions={actions} presentation={s.presentation ?? inlinePresentation()} />
     );
   const labels: Record<string, [string, string]> = {
     connecting: ["正在连接反馈组件", "Connecting to the host"],

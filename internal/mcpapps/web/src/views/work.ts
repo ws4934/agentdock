@@ -8,6 +8,7 @@ import {
   group,
   tr,
 } from "../model";
+import { taskID } from "../presentation";
 
 export const normalize: Normalizer = (data, l) => {
   const p = object(data.work_result);
@@ -93,6 +94,12 @@ export const normalize: Normalizer = (data, l) => {
     summary:
       labels[text(p.validation)] || tr(l, "验证状态未知", "Validation unknown"),
     tone: p.validation === "current_failures_present" ? "error" : "neutral",
+    task: taskID(task.id) ? { id: taskID(task.id)!, canContinue: !frozen && ["active", "blocked"].includes(text(task.status)) } : undefined,
+    state: text(task.status),
+    progress: Array.isArray(task.steps) && task.steps.length > 0 ? {
+      total: Math.min(task.steps.length, 12),
+      done: records(task.steps, 12).filter(step => step.status === "completed").length,
+    } : undefined,
     metrics: [
       frozen
         ? tr(l, "冻结交付 · 历史快照", "Frozen delivery · historical snapshot")
@@ -101,6 +108,7 @@ export const normalize: Normalizer = (data, l) => {
       ...(source.head ? [text(source.head, 12)] : []),
     ],
     groups: [
+      group("steps", tr(l, "任务检查点", "Task checkpoints"), records(task.steps, 12)),
       {
         id: "validation",
         title: tr(l, "机器验证证据", "Machine evidence"),

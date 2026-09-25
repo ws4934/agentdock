@@ -25,6 +25,10 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
     private let scrollDocumentView = TopAlignedDocumentView()
     private let contentStack = TopAlignedStackView()
     private let serviceSection = NSStackView()
+    private let navigation = NSSegmentedControl(labels: [L10n.text("Overview"), L10n.text("Connection settings")], trackingMode: .selectOne, target: nil, action: nil)
+    private let tasksButton = NSButton(title: L10n.text("Task center"), target: nil, action: nil)
+    private var overviewCard: NSView?
+    private var connectionCard: NSView?
     private let localAddress = NSTextField(labelWithString: L10n.text("Not installed"))
     private let publicAddress = NSTextField(labelWithString: L10n.text("Disabled"))
     private let publicCheckStatus = NSTextField(labelWithString: "")
@@ -57,7 +61,10 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
     private let logsButton = NSButton(title: L10n.text("Open logs"), target: nil, action: nil)
     private let diagnosticsButton = NSButton(title: L10n.text("Diagnostics"), target: nil, action: nil)
     private lazy var diagnosticsWindow = DiagnosticsWindowController(service: service)
+    private lazy var taskCenterWindow = TaskCenterWindowController(service: service)
     @objc private func openDiagnosticsPressed() { diagnosticsWindow.present() }
+    @objc func presentTaskCenter() { taskCenterWindow.present() }
+    func presentDiagnostics() { diagnosticsWindow.present() }
 
     private var currentStatus = ServiceStatus.missing
     private var initialMode: TunnelMode = .local
@@ -68,6 +75,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
     private var oauthVisible = false
     private var isBusy = false
     private var isUpdateInProgress = false
+    private var externalOperationInProgress = false
     private var quickTunnelRefreshState: QuickTunnelRefreshState = .idle
 
     private var migrationRequired: Bool {
@@ -75,7 +83,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private var controlsLocked: Bool {
-        isBusy || isUpdateInProgress
+        isBusy || isUpdateInProgress || externalOperationInProgress
     }
 
     var hasActiveServiceOperation: Bool {
@@ -100,14 +108,15 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
         self.onChanged = onChanged
         self.onUpdateRequested = onUpdateRequested
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 700, height: 590),
+            contentRect: NSRect(x: 0, y: 0, width: 790, height: 620),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "AgentDock"
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 620, height: 420)
+        window.minSize = NSSize(width: 700, height: 460)
+        window.setFrameAutosaveName("AgentDockManagement")
         window.center()
         super.init(window: window)
         window.delegate = self
@@ -119,13 +128,14 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func present(status: ServiceStatus) {
-        update(status: status)
+        if controlsLocked { refreshServiceStatus(status) } else { update(status: status) }
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
     func update(status: ServiceStatus) {
+        guard !isBusy else { currentStatus = status; return }
         currentStatus = status
         authVisible = false
         oauthVisible = false
@@ -153,6 +163,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
             advancedButton.isEnabled = false
             logsButton.isEnabled = false
             serviceSection.isHidden = true
+            navigation.selectedSegment = 1
             authTokenValue = ""
             oauthPasswordValue = ""
             select(mode: .local)
@@ -160,7 +171,20 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
         updateNexusState(status.nexusConnection)
         refreshCredentialFields()
         refreshChangeState()
+        navigationChanged()
         updateWindowHeight()
+    }
+
+    func setExternalOperationInProgress(_ value: Bool) {
+        externalOperationInProgress = value
+        setBusy(isBusy)
+        advancedSettings?.setUpdateInProgress(value || isUpdateInProgress)
+    }
+
+    @objc private func navigationChanged() {
+        overviewCard?.isHidden = navigation.selectedSegment == 1
+        connectionCard?.isHidden = navigation.selectedSegment != 1
+        applyButton.isHidden = navigation.selectedSegment != 1
     }
 
     func setUpdateInProgress(_ inProgress: Bool) {
@@ -294,7 +318,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
         publicMode.target = self
         publicMode.action = #selector(modeChanged)
         publicMode.segmentStyle = .rounded
-        publicMode.widthAnchor.constraint(equalToConstant: 360).isActive = true
+        publicMode.setContentHuggingPriority(.defaultLow, for: .horizontal)
         modeDescription.textColor = .secondaryLabelColor
         modeDescription.font = .systemFont(ofSize: 12)
 
@@ -319,7 +343,8 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
         progress.controlSize = .small
         progress.isDisplayedWhenStopped = false
         statusLabel.textColor = .secondaryLabelColor
-        statusLabel.lineBreakMode = .byTruncatingTail
+        statusLabel.lineBreakMode = .byWordWrapping
+        statusLabel.maximumNumberOfLines = 3
         statusLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         statusLabel.isHidden = true
@@ -341,32 +366,42 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
         applyButton.target = self
         applyButton.action = #selector(applyPressed)
 
-        let footer = NSStackView(views: [logsButton, permissionsButton, advancedButton, diagnosticsButton, progress, statusLabel, NSView(), applyButton])
-        footer.orientation = .horizontal
-        footer.alignment = .centerY
-        footer.spacing = 10
-
-        // 给配置区和底部操作留出明确的呼吸空间；小窗口仍由外层滚动区承载。
-        let footerSpacer = NSView()
-        footerSpacer.heightAnchor.constraint(equalToConstant: 8).isActive = true
-
-        addFullWidth(header, to: contentStack)
-        addFullWidth(separator(), to: contentStack)
-        addFullWidth(serviceSection, to: contentStack)
-        addFullWidth(separator(), to: contentStack)
-        contentStack.addArrangedSubview(sectionTitle(L10n.text("Public access")))
-        contentStack.addArrangedSubview(publicMode)
-        addFullWidth(modeDescription, to: contentStack)
-        addFullWidth(namedFields, to: contentStack)
-        addFullWidth(separator(), to: contentStack)
-        addFullWidth(footerSpacer, to: contentStack)
-        addFullWidth(footer, to: contentStack)
+        let footerTools = NSStackView(views: [logsButton, permissionsButton, advancedButton, NSView(), applyButton])
+        footerTools.spacing = 14
+        let statusRow = NSStackView(views: [progress, statusLabel]); statusRow.spacing = 8
+        let footer = ManagementUI.column([statusRow, footerTools], spacing: 9)
+        navigation.selectedSegment = 0; navigation.target = self; navigation.action = #selector(navigationChanged)
+        tasksButton.target = self; tasksButton.action = #selector(presentTaskCenter)
+        tasksButton.bezelStyle = .rounded; diagnosticsButton.bezelStyle = .rounded
+        let navigationRow = NSStackView(views: [navigation, NSView(), tasksButton, diagnosticsButton])
+        navigationRow.spacing = 12
+        let fixedHeader = ManagementUI.column([header, navigationRow], spacing: 20)
+        let publicSection = ManagementUI.column([
+            sectionTitle(L10n.text("Public access")), publicMode, modeDescription, namedFields,
+            ManagementUI.label(L10n.text("Applying connection settings may restart services. Existing credentials are kept unless explicitly replaced."), size: 12, secondary: true)
+        ], spacing: 16)
+        let overview = ManagementUI.card(serviceSection)
+        let connection = ManagementUI.card(publicSection)
+        overviewCard = overview; connectionCard = connection
+        addFullWidth(overview, to: contentStack)
+        addFullWidth(connection, to: contentStack)
+        addFullWidth(ManagementUI.label(L10n.text("Use Task center to return to work from any chat. Use Diagnostics to distinguish local startup from public connectivity."), size: 12, secondary: true), to: contentStack)
+        fixedHeader.translatesAutoresizingMaskIntoConstraints = false
+        footer.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(fixedHeader); contentView.addSubview(footer)
+        navigationChanged()
 
         NSLayoutConstraint.activate([
+            fixedHeader.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 28),
+            fixedHeader.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -28),
+            fixedHeader.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 24),
+            footer.leadingAnchor.constraint(equalTo: fixedHeader.leadingAnchor),
+            footer.trailingAnchor.constraint(equalTo: fixedHeader.trailingAnchor),
+            footer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -20),
             scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: contentView.topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            scrollView.topAnchor.constraint(equalTo: fixedHeader.bottomAnchor, constant: 8),
+            scrollView.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -8),
             scrollDocumentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
             contentStack.leadingAnchor.constraint(equalTo: scrollDocumentView.leadingAnchor, constant: 28),
             contentStack.trailingAnchor.constraint(equalTo: scrollDocumentView.trailingAnchor, constant: -28),
@@ -616,7 +651,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
     @objc private func configurationEdited() { refreshChangeState() }
 
     @objc private func applyPressed() {
-        guard !isUpdateInProgress else { return }
+        guard !controlsLocked, !hasActiveServiceOperation else { return }
         let request = InstallRequest(
             mode: selectedMode,
             serverURL: serverURLField.stringValue,
@@ -683,7 +718,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func startStopPressed() {
-        guard !isUpdateInProgress else { return }
+        guard !controlsLocked, !hasActiveServiceOperation else { return }
         if currentStatus.requiresApproval {
             service.openBackgroundItemsSettings()
             return
@@ -714,7 +749,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
         completed: String,
         operation: @escaping () async throws -> Void
     ) {
-        guard !isUpdateInProgress else { return }
+        guard !controlsLocked, !hasActiveServiceOperation else { return }
         setBusy(true)
         showStatus(inProgress, isError: false)
         Task {
@@ -732,7 +767,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
 
     @objc private func openPermissionsPressed() { permissionsWindow.present() }
     @objc private func openAdvancedPressed() {
-        guard !isUpdateInProgress else { return }
+        guard !controlsLocked else { return }
         if advancedSettings == nil {
             advancedSettings = AdvancedSettingsWindowController(
                 service: service,
@@ -845,25 +880,8 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func updateWindowHeight() {
-        let installedHeight: CGFloat = selectedMode == .named ? 620 : 580
-        let installHeight: CGFloat = selectedMode == .named ? 455 : 360
-        let desiredHeight = currentStatus.installed ? installedHeight : installHeight
-        guard let window else { return }
-
-        let visibleFrame = (window.screen ?? NSScreen.main)?.visibleFrame
-        let verticalMargin: CGFloat = 12
-        let maximumHeight = visibleFrame.map { max(window.minSize.height, $0.height - verticalMargin * 2) }
-        let targetHeight = min(desiredHeight, maximumHeight ?? desiredHeight)
-
-        // 保持窗口顶部尽量不跳动，同时确保整个窗口始终位于菜单栏和 Dock 之间的可用区域。
-        var frame = window.frame
-        frame.origin.y = frame.maxY - targetHeight
-        frame.size.height = targetHeight
-        if let visibleFrame {
-            frame.origin.y = min(frame.origin.y, visibleFrame.maxY - verticalMargin - targetHeight)
-            frame.origin.y = max(frame.origin.y, visibleFrame.minY + verticalMargin)
-        }
-        window.setFrame(frame, display: true, animate: window.isVisible)
+        // 不在切换连接模式或后台刷新时改变用户调整的窗口大小。
+        contentStack.needsLayout = true
     }
 
     private func sectionTitle(_ title: String) -> NSTextField {

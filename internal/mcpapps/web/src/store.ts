@@ -22,7 +22,10 @@ export interface Snapshot {
   locale: Locale;
   model?: Model;
   message?: string;
+  presentation?: Presentation;
 }
+
+import { type Presentation } from "./presentation";
 
 // 收敛为有界的展示模型；重复快照不触发订阅者，不比较整份业务结果。
 export class Store {
@@ -31,6 +34,7 @@ export class Store {
   private listeners = new Set<() => void>();
   private models: Partial<Record<Locale, Model>> = {};
   private ended = false;
+  private presentation?: Presentation;
   constructor(
     private normalize: Normalizer,
     locale: Locale,
@@ -45,6 +49,7 @@ export class Store {
   };
   private set(next: Snapshot): void {
     if (this.ended) return;
+    if (this.presentation) next = { ...next, presentation: this.presentation };
     const key = JSON.stringify(next);
     if (this.key === key) return;
     this.key = key;
@@ -54,6 +59,11 @@ export class Store {
   phase(phase: Phase, message?: string): void {
     this.models = {};
     this.set({ phase, locale: this.snapshot.locale, message });
+  }
+  setPresentation(presentation: Presentation): void {
+    if (this.ended) return;
+    this.presentation = presentation;
+    this.set({ ...this.snapshot, presentation });
   }
   locale(locale: Locale): void {
     if (locale === this.snapshot.locale) return;
@@ -130,6 +140,7 @@ export class Store {
   }
   dispose(): void {
     this.ended = true;
+    this.presentation = undefined;
     this.models = {};
     this.snapshot = { phase: "empty", locale: this.snapshot.locale };
     this.key = "";

@@ -17,6 +17,7 @@ cleanup() {
 trap cleanup EXIT
 
 python3 "$ROOT_DIR/scripts/test/check-macos-i18n.py"
+"$ROOT_DIR/scripts/test/test-management-macos.sh"
 
 swiftc -swift-version 5 -parse-as-library \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/Localization.swift" \
@@ -92,6 +93,8 @@ swiftc \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/TunnelTokenStore.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/LegacyDesktopRuntimeMigration.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/UpdateProgressEvent.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ServiceLifecycle.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/LocalRuntimeClient.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ServiceController.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/InstallerRunner.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Tests/ServiceControllerValidationTests.swift" \

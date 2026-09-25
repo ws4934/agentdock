@@ -4,8 +4,8 @@ import Foundation
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let service = ServiceController()
-    private lazy var diagnosticsWindow = DiagnosticsWindowController(service: service)
-    @objc private func openDiagnostics() { diagnosticsWindow.present() }
+    @objc private func openDiagnostics() { setupWindow.presentDiagnostics() }
+    @objc private func openTaskCenter() { setupWindow.presentTaskCenter() }
     private lazy var computerUse = ComputerUseMonitor(runtimeRoot: ProcessInfo.processInfo.environment["AGENTDOCK_MONITOR_RUNTIME_ROOT"].map { URL(fileURLWithPath: $0) } ?? service.paths.appSupport)
     private let menuLoginAgent = MenuLoginAgentController()
     private let launchedInBackground = CommandLine.arguments.contains("--background")
@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var timer: Timer?
     private var isUpdating = false
     private var trayServiceActionInProgress = false
+    private var startupInProgress = false
+    private var statusRefreshInProgress = false
     private lazy var updateProgressWindow = UpdateProgressWindowController()
     private lazy var setupWindow = SetupWindowController(
         service: service,
@@ -63,13 +65,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             configureMenuLoginAgentIfNeeded()
             DesktopUpdateServiceState.remove(at: service.paths.updateServiceState)
             DesktopUpdateHandoff.remove(at: service.paths.updateHandoff)
+            startupInProgress = true
+            setupWindow.setExternalOperationInProgress(true)
             refreshStatus(showWindow: !launchedInBackground)
             Task {
                 do {
-                    try await service.reconcileTunnelRegistrationFromConfiguration()
+                    try await service.reconcileBackgroundServicesOnLaunch()
                 } catch {
-                    NSLog("AgentDock 启动时 Tunnel 状态收敛失败：%@", error.localizedDescription)
+                    NSLog("AgentDock 启动状态收敛失败：%@", error.localizedDescription)
                 }
+                self.startupInProgress = false
+                self.setupWindow.setExternalOperationInProgress(false)
                 self.refreshStatus()
             }
         }
@@ -113,10 +119,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
                 // Restore Bundle-owned SMAppService definitions first. requiresApproval is an
                 // explicit policy state and is reported to the Arbiter instead of failing the App.
-                let registration = try service.restoreBackgroundServiceRegistrationsForUpdate(
-                    coreEnabled: serviceState.coreEnabled,
-                    tunnelEnabled: serviceState.tunnelEnabled
-                )
+                let registration = try await service.runInBackground {
+                    try self.service.restoreBackgroundServiceRegistrationsForUpdate(
+                        coreEnabled: serviceState.coreEnabled,
+                        tunnelEnabled: serviceState.tunnelEnabled
+                    )
+                }
                 if pendingResult.ok {
                     try DesktopUpdateHandoff(
                         targetVersion: pendingResult.targetVersion,
@@ -383,7 +391,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshStatus(showWindow: Bool = false) {
+        guard !statusRefreshInProgress else { return }
+        statusRefreshInProgress = true
         Task {
+            defer { statusRefreshInProgress = false }
             let status = await service.status()
             await MainActor.run {
                 self.currentStatus = status
@@ -451,6 +462,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
 
         menu.addItem(item(currentStatus.installed ? L10n.text("Open AgentDock") : L10n.text("Set up AgentDock…"), #selector(showSetup)))
+        menu.addItem(item(L10n.text("Task center"), #selector(openTaskCenter)))
         menu.addItem(item(L10n.text("Check permissions"), #selector(openPermissions)))
         menu.addItem(computerUse.trustedApplicationsMenuItem())
         menu.addItem(item(L10n.text("Connection diagnostics"), #selector(openDiagnostics)))
@@ -508,7 +520,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updateProgressWindow.present()
             return
         }
-        guard !trayServiceActionInProgress, !setupWindow.hasActiveServiceOperation else {
+        guard !startupInProgress, !trayServiceActionInProgress, !setupWindow.hasActiveServiceOperation else {
             presentAlert(
                 title: L10n.text("AgentDock is busy"),
                 message: L10n.text("Wait for the current AgentDock operation to finish before starting an update.")
@@ -543,19 +555,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updateProgressWindow.present()
             return
         }
-        guard !trayServiceActionInProgress else { return }
+        guard !startupInProgress, !trayServiceActionInProgress, !setupWindow.hasActiveServiceOperation else { return }
         trayServiceActionInProgress = true
+        setupWindow.setExternalOperationInProgress(true)
         Task {
             do {
                 try await operation()
                 try? await Task.sleep(nanoseconds: 800_000_000)
                 await MainActor.run {
                     self.trayServiceActionInProgress = false
+                    self.setupWindow.setExternalOperationInProgress(false)
                     self.refreshStatus()
                 }
             } catch {
                 await MainActor.run {
                     self.trayServiceActionInProgress = false
+                    self.setupWindow.setExternalOperationInProgress(false)
                     self.presentAlert(
                         title: L10n.format("%@ failed", action),
                         message: error.localizedDescription,

@@ -58,15 +58,17 @@ final class InstallerRunner {
         let previousStatus = await service.status()
         let previousCoreEnabled = previousStatus.autostartEnabled || previousStatus.requiresApproval
         let previousTunnelEnabled = service.tunnelEnabled()
+        let previousCoreIntent = try service.lifecycleJournal.desired(.core)
+        let previousTunnelIntent = try service.lifecycleJournal.desired(.tunnel)
         let snapshots = try snapshotManagedFiles()
         var legacyMigration: LegacyDesktopRuntimeMigration.Transaction?
 
         do {
             // 配置切换前先停掉受 SMAppService 管理的进程，避免旧 Tunnel 或 Core
             // 在事务中途读取到一半新、一半旧的配置。
-            try service.setTunnelEnabled(false)
+            try await service.setTunnelEnabled(false, rememberIntent: false)
             if previousCoreEnabled {
-                try await service.stop()
+                try await service.stop(rememberIntent: false)
             }
 
             legacyMigration = try LegacyDesktopRuntimeMigration(paths: paths).begin()
@@ -81,18 +83,9 @@ final class InstallerRunner {
                 try self.bootstrapCoreSkills()
             }
 
-            try await service.start()
+            try await service.start(rememberIntent: false)
             if request.mode != .local {
-                try service.setTunnelEnabled(true)
-                if !(await service.waitForTunnelProcess()) {
-                    // App Bundle 被原子替换后，SMAppService 可能仍显示已注册，
-                    // 但实际的 Tunnel job 没有随之启动。对 Quick Tunnel 也
-                    // 需要与 Named Tunnel 相同的自愈，否则会一直等到 URL 超时。
-                    try service.restartTunnel()
-                    guard await service.waitForTunnelProcess() else {
-                        throw ValidationError(L10n.text("AgentDock Tunnel was re-registered, but cloudflared did not run reliably."))
-                    }
-                }
+                try await service.setTunnelEnabled(true, rememberIntent: false)
             }
 
             let publicURL: String
@@ -115,6 +108,7 @@ final class InstallerRunner {
                 throw ValidationError(L10n.text("AgentDock configuration was written, but the final local MCP address could not be read."))
             }
             let publicMCPURL = publicURL.isEmpty ? "" : publicURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/mcp"
+            try service.lifecycleJournal.setIntents(core: true, tunnel: request.mode != .local)
             try legacyMigration?.commit()
             return InstallResult(
                 schemaVersion: 1,
@@ -131,15 +125,17 @@ final class InstallerRunner {
         } catch {
             let originalError = error
             do {
-                try service.setTunnelEnabled(false)
-                try await service.stop()
+                try await service.setTunnelEnabled(false, rememberIntent: false)
+                try await service.stop(rememberIntent: false)
                 try restoreManagedFiles(snapshots)
                 try legacyMigration?.rollback()
+                // 意图文件写入失败不能阻止配置回滚，但必须阻止不确定的自动重启。
+                try service.lifecycleJournal.setIntents(core: previousCoreIntent, tunnel: previousTunnelIntent)
                 if previousCoreEnabled {
-                    try await service.start()
+                    try await service.start(rememberIntent: false)
                 }
                 if previousTunnelEnabled {
-                    try service.setTunnelEnabled(true)
+                    try await service.setTunnelEnabled(true, rememberIntent: false)
                 }
             } catch {
                 throw ValidationError(L10n.format(

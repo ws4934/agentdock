@@ -14,13 +14,14 @@ func (s *Service) RuntimeTasks(status string, limit int) (Result, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	tasks, err := s.tasks.List(statusFilter, limit)
+	tasks, partial, err := s.tasks.ListPage(statusFilter, limit)
 	if err != nil {
 		return nil, taskToolError(err)
 	}
 	items := make([]map[string]any, 0, len(tasks))
 	for _, task := range tasks {
 		item := compactTaskListItem(task)
+		item["project"] = task.Project
 		item["created_at"] = task.CreatedAt
 		item["event_count"] = len(task.Events)
 		if task.CompletedAt != nil {
@@ -34,7 +35,7 @@ func (s *Service) RuntimeTasks(status string, limit int) (Result, error) {
 		}
 		items = append(items, item)
 	}
-	return Result{"ok": true, "source": "agentdock-api", "action": "list", "tasks": items, "count": len(items)}, nil
+	return Result{"ok": true, "source": "agentdock-api", "action": "list", "tasks": items, "count": len(items), "partial": partial, "observation_only": true}, nil
 }
 
 func (s *Service) RuntimeTask(id string) (Result, error) {

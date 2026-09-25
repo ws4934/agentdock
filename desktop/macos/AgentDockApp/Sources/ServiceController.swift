@@ -93,9 +93,17 @@ final class ServiceController: @unchecked Sendable {
     static let tunnelPlistName = "com.uvwt.agentdock.tunnel.plist"
 
     let paths: AppPaths
+    let lifecycleJournal: LifecycleJournal
+    private let coreLifecycle: ManagedServiceLifecycle
+    private let tunnelLifecycle: ManagedServiceLifecycle
+    private let localNetwork = LocalRuntimeClient()
 
     init(paths: AppPaths = AppPaths()) {
         self.paths = paths
+        let journal = LifecycleJournal(url: paths.appSupport.appendingPathComponent("service-lifecycle.json"))
+        lifecycleJournal = journal
+        coreLifecycle = ManagedServiceLifecycle(kind: .core, journal: journal)
+        tunnelLifecycle = ManagedServiceLifecycle(kind: .tunnel, journal: journal)
     }
 
     func status() async -> ServiceStatus {
@@ -113,7 +121,7 @@ final class ServiceController: @unchecked Sendable {
         let requiresApproval = registration == .requiresApproval
         let enabled = registration == .enabled
         let registered = enabled || requiresApproval
-        let loaded = enabled && isLoaded(label: Self.coreLabel)
+        let loaded = enabled ? ((try? await runInBackground { self.isLoaded(label: Self.coreLabel) }) ?? false) : false
         let nexusConnected = loaded && nexusDevice.paired ? await fetchNexusConnected() : false
 
         guard loaded, let healthURL = configuration?.healthURL else {
@@ -144,16 +152,12 @@ final class ServiceController: @unchecked Sendable {
         )
     }
 
-    func start() async throws {
-        try registerCoreIfNeeded()
-        guard let configuration = ServiceConfiguration.load(from: paths.environment),
-              await waitForHealth(configuration: configuration) else {
-            throw ValidationError(L10n.text("AgentDock background service is enabled, but the health check did not pass."))
-        }
+    func start(rememberIntent: Bool = true) async throws {
+        try await coreLifecycle.start(lifecycleOperations(.core), rememberIntent: rememberIntent)
     }
 
-    func stop() async throws {
-        try unregister(service: coreService, label: Self.coreLabel)
+    func stop(rememberIntent: Bool = true) async throws {
+        try await coreLifecycle.stop(lifecycleOperations(.core), rememberIntent: rememberIntent)
     }
 
     func unregisterManagedBackgroundServicesForUninstall() throws {
@@ -174,11 +178,7 @@ final class ServiceController: @unchecked Sendable {
     }
 
     func restart() async throws {
-        try reregister(service: coreService, label: Self.coreLabel, displayName: "AgentDock Core")
-        guard let configuration = ServiceConfiguration.load(from: paths.environment),
-              await waitForHealth(configuration: configuration) else {
-            throw ValidationError(L10n.text("AgentDock Core was re-registered, but the health check did not pass."))
-        }
+        try await coreLifecycle.start(lifecycleOperations(.core), restart: true)
     }
 
     func nexusDeviceStatus() -> NexusDeviceStatus {
@@ -247,45 +247,31 @@ final class ServiceController: @unchecked Sendable {
 
         switch try configuredTunnelMode() {
         case .local:
-            try setTunnelEnabled(false)
+            try await setTunnelEnabled(false, rememberIntent: false)
         case .quick, .named, .secure:
-            try setTunnelEnabled(true)
-            if tunnelService.status == .enabled, !(await waitForTunnelProcess()) {
-                // App Bundle 被原子替换后，macOS 偶尔仍把旧 SMAppService 注册显示为 enabled，
-                // 但 launchd 保存的 Bundle 关联已经失效。此时单纯再次 register 会直接 no-op；
-                // 必须完整注销并重新注册，效果等同于用户手动“仅本地 → 公网”但无需人工介入。
-                NSLog("AgentDock Tunnel 注册显示 enabled 但进程未稳定，开始自动重新注册。")
-                try restartTunnel()
-                guard await waitForTunnelProcess() else {
-                    throw ValidationError(L10n.text("AgentDock Tunnel was re-registered, but the background process did not start reliably."))
-                }
-            }
+            try await setTunnelEnabled(lifecycleJournal.resolve(.tunnel, fallback: true), rememberIntent: false)
         }
     }
 
-    func setTunnelEnabled(_ enabled: Bool) throws {
+    func setTunnelEnabled(_ enabled: Bool, rememberIntent: Bool = true) async throws {
         if enabled {
-            try register(
-                service: tunnelService,
-                plistName: Self.tunnelPlistName,
-                displayName: "AgentDock Tunnel"
-            )
+            try await tunnelLifecycle.start(lifecycleOperations(.tunnel), rememberIntent: rememberIntent)
         } else {
-            try unregister(service: tunnelService, label: Self.tunnelLabel)
+            try await tunnelLifecycle.stop(lifecycleOperations(.tunnel), rememberIntent: rememberIntent)
         }
     }
 
-    func restartTunnel() throws {
-        try reregister(service: tunnelService, label: Self.tunnelLabel, displayName: "AgentDock Tunnel")
+    func restartTunnel() async throws {
+        try await tunnelLifecycle.start(lifecycleOperations(.tunnel), restart: true)
     }
 
     func restoreBackgroundServiceRegistrations(coreEnabled: Bool, tunnelEnabled: Bool) throws {
-        if coreEnabled {
+        if try lifecycleJournal.resolve(.core, fallback: coreEnabled) {
             try restoreRegistration(service: coreService, label: Self.coreLabel, displayName: "AgentDock Core")
         } else {
             try unregister(service: coreService, label: Self.coreLabel)
         }
-        if tunnelEnabled {
+        if try lifecycleJournal.resolve(.tunnel, fallback: tunnelEnabled) {
             try restoreRegistration(service: tunnelService, label: Self.tunnelLabel, displayName: "AgentDock Tunnel")
         } else {
             try unregister(service: tunnelService, label: Self.tunnelLabel)
@@ -300,7 +286,7 @@ final class ServiceController: @unchecked Sendable {
             service: coreService,
             label: Self.coreLabel,
             displayName: "AgentDock Core",
-            expectedEnabled: coreEnabled
+            expectedEnabled: lifecycleJournal.resolve(.core, fallback: coreEnabled)
         )
         let tunnelState: String
         do {
@@ -308,7 +294,7 @@ final class ServiceController: @unchecked Sendable {
                 service: tunnelService,
                 label: Self.tunnelLabel,
                 displayName: "AgentDock Tunnel",
-                expectedEnabled: tunnelEnabled
+                expectedEnabled: lifecycleJournal.resolve(.tunnel, fallback: tunnelEnabled)
             )
         } catch {
             // Tunnel availability depends on ServiceManagement policy plus external/network state.
@@ -322,37 +308,21 @@ final class ServiceController: @unchecked Sendable {
     }
 
     func recoverBackgroundServicesAfterUpdate(coreEnabled: Bool, tunnelEnabled: Bool) async -> [String] {
-        // App Bundle 刚替换后，SMAppService 的注册状态可能已经生效，但 launchd 真正拉起
-        // Core/Tunnel 仍需要更长时间。先给系统一个正常传播窗口，再做一次有界自愈；
-        // 自愈仍失败时只提示，不把已经完成 handoff 的 App 更新回滚掉。
         var warnings: [String] = []
-        if tunnelEnabled,
-           tunnelService.status == .enabled,
-           !(await waitForTunnelProcess()) {
-            warnings.append(L10n.text("AgentDock Tunnel background registration was restored, but the process is still starting."))
-        }
-        if coreEnabled,
-           coreService.status == .enabled,
-           let configuration = ServiceConfiguration.load(from: paths.environment),
-           !(await waitForHealth(configuration: configuration, timeout: 10)) {
-            // 实机更新后可能出现“SMAppService 显示 enabled，但 Core 进程没有真正拉起”的状态。
-            // 控制面板“重启”之所以能恢复，是因为它会完整 unregister/register；这里复用同一路径，
-            // 避免用户在每次 App 更新后手动点击重启。
-            NSLog("AgentDock Core 注册显示 enabled 但健康检查未通过，开始自动重新注册。")
-            do {
-                try await restart()
-            } catch {
-                warnings.append(L10n.format(
-                    "AgentDock Core background registration was restored, but automatic restart still failed the health check: %@",
-                    error.localizedDescription
-                ))
-            }
-        }
+        do {
+            if try lifecycleJournal.resolve(.core, fallback: coreEnabled) { try await start(rememberIntent: false) }
+            else { try await stop(rememberIntent: false) }
+        } catch { warnings.append(error.localizedDescription) }
+        do {
+            try await setTunnelEnabled(lifecycleJournal.resolve(.tunnel, fallback: tunnelEnabled), rememberIntent: false)
+        } catch { warnings.append(error.localizedDescription) }
         return warnings
     }
 
     func reregisterBackgroundServices(coreEnabled: Bool, tunnelEnabled: Bool) async throws -> [String] {
-        try restoreBackgroundServiceRegistrations(coreEnabled: coreEnabled, tunnelEnabled: tunnelEnabled)
+        try await runInBackground {
+            try self.restoreBackgroundServiceRegistrations(coreEnabled: coreEnabled, tunnelEnabled: tunnelEnabled)
+        }
         return await recoverBackgroundServicesAfterUpdate(coreEnabled: coreEnabled, tunnelEnabled: tunnelEnabled)
     }
 
@@ -376,11 +346,97 @@ final class ServiceController: @unchecked Sendable {
     }
 
     func waitForHealth(configuration: ServiceConfiguration, timeout: TimeInterval = 30) async -> Bool {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(returning: self.waitForHealthSynchronously(configuration: configuration, timeout: timeout))
-            }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(timeout))
+        while !Task.isCancelled && ContinuousClock.now < deadline {
+            let code = await coreReadiness(configuration: configuration)
+            if code == .ready { return true }
+            if code == .unexpectedHealth || code == .configurationInvalid { return false }
+            do { try await Task.sleep(for: .milliseconds(250)) } catch { return false }
         }
+        return false
+    }
+
+    func reconcileBackgroundServicesOnLaunch() async throws {
+        guard !LegacyDesktopRuntimeMigration.isPresent(paths: paths),
+              FileManager.default.fileExists(atPath: paths.environment.path) else { return }
+        let desired = try lifecycleJournal.desired(.core)
+        let enabled = try await runInBackground { self.coreService.status == .enabled }
+        // 没有意图文件的旧安装只继承 enabled；不猜测已停止服务应当自动运行。
+        guard desired ?? enabled else { return }
+        try await start()
+        try await reconcileTunnelRegistrationFromConfiguration()
+    }
+
+    func lifecycleOperationInProgress() async -> Bool {
+        let core = await coreLifecycle.isOperating()
+        let tunnel = await tunnelLifecycle.isOperating()
+        return core || tunnel
+    }
+
+    // Core 离线时仍可观察系统注册/进程，不读取日志或返回环境变量。
+    func localDiagnosticFacts() async -> [String: String] {
+        (try? await runInBackground {
+            func registration(_ service: SMAppService) -> String {
+                switch service.status {
+                case .enabled: return "enabled"
+                case .requiresApproval: return "requires_approval"
+                case .notRegistered, .notFound: return "not_registered"
+                @unknown default: return "unknown"
+                }
+            }
+            return [
+                "configuration": ServiceConfiguration.load(from: self.paths.environment) == nil ? "invalid_or_missing" : "readable",
+                "core_registration": registration(self.coreService),
+                "core_process": self.launchdProcessID(label: Self.coreLabel) == nil ? "not_observed" : "running",
+                "tunnel_registration": registration(self.tunnelService),
+                "tunnel_process": self.launchdProcessID(label: Self.tunnelLabel) == nil ? "not_observed" : "running"
+            ]
+        }) ?? [:]
+    }
+
+    private func lifecycleOperations(_ kind: ManagedServiceKind) -> LifecycleOperations {
+        let label = kind == .core ? Self.coreLabel : Self.tunnelLabel
+        let plist = kind == .core ? Self.corePlistName : Self.tunnelPlistName
+        let displayName = kind == .core ? "AgentDock Core" : "AgentDock Tunnel"
+        return LifecycleOperations(
+            validate: { [self] in
+                try await runInBackground {
+                    try self.validateServiceManagementReadiness()
+                    try self.validateBundledServiceDefinition(plistName: plist, displayName: displayName)
+                    guard let configuration = ServiceConfiguration.load(from: self.paths.environment) else {
+                        throw LifecycleFailure(service: kind, code: .configurationInvalid)
+                    }
+                    _ = try LocalRuntimeClient.endpoint(configuration: configuration, path: "/healthz")
+                    if kind == .tunnel { _ = try ManagedEnvironment.load(from: self.paths.tunnelEnvironment) }
+                }
+            },
+            registration: { [self] in
+                (try? await runInBackground {
+                    let state = (kind == .core ? self.coreService : self.tunnelService).status
+                    if state == .enabled { return ServiceRegistration.enabled }
+                    if state == .requiresApproval { return ServiceRegistration.approvalRequired }
+                    return ServiceRegistration.unregistered
+                }) ?? .unregistered
+            },
+            register: { [self] in
+                try await runInBackground {
+                    try self.register(service: kind == .core ? self.coreService : self.tunnelService,
+                                      plistName: plist, displayName: displayName)
+                }
+            },
+            unregister: { [self] in
+                try await runInBackground {
+                    try self.unregister(service: kind == .core ? self.coreService : self.tunnelService, label: label)
+                }
+            },
+            observe: { [self] in
+                let pid = try? await runInBackground { self.launchdProcessID(label: label) }
+                guard let pid else { return LifecycleObservation(code: .waitingProcess) }
+                if kind == .tunnel { return LifecycleObservation(code: .processReady, processID: pid) }
+                guard let configuration = ServiceConfiguration.load(from: paths.environment) else { return LifecycleObservation(code: .configurationInvalid) }
+                return LifecycleObservation(code: await coreReadiness(configuration: configuration), processID: pid)
+            }
+        )
     }
 
     func update(onProgress: @escaping (UpdateProgressEvent) -> Void) async throws -> String {
@@ -417,8 +473,8 @@ final class ServiceController: @unchecked Sendable {
 
         let output: String
         do {
-            try setTunnelEnabled(false)
-            try await stop()
+            try await setTunnelEnabled(false, rememberIntent: false)
+            try await stop(rememberIntent: false)
             output = try await runInBackground {
                 let result = try runUpdateProcess(
                     executable: self.paths.binary.path,
@@ -491,14 +547,6 @@ final class ServiceController: @unchecked Sendable {
         SMAppService.agent(plistName: Self.tunnelPlistName)
     }
 
-    private func registerCoreIfNeeded() throws {
-        try register(
-            service: coreService,
-            plistName: Self.corePlistName,
-            displayName: "AgentDock Core"
-        )
-    }
-
     private func register(service: SMAppService, plistName: String, displayName: String) throws {
         try validateServiceManagementReadiness()
         try validateBundledServiceDefinition(plistName: plistName, displayName: displayName)
@@ -523,12 +571,7 @@ final class ServiceController: @unchecked Sendable {
                 displayName
             ))
         }
-        guard service.status == .enabled else {
-            throw ValidationError(L10n.format(
-                "%@ registration completed, but the system did not mark it as runnable.",
-                displayName
-            ))
-        }
+        // 首次注册状态可能尚未传播；由统一协调器有界等待，不立即误报失败。
     }
 
     private func unregister(service: SMAppService, label: String) throws {
@@ -546,12 +589,6 @@ final class ServiceController: @unchecked Sendable {
         @unknown default:
             return
         }
-    }
-
-    private func reregister(service: SMAppService, label: String, displayName: String) throws {
-        try unregister(service: service, label: label)
-        let plistName = label == Self.coreLabel ? Self.corePlistName : Self.tunnelPlistName
-        try register(service: service, plistName: plistName, displayName: displayName)
     }
 
     private func restoreRegistration(service: SMAppService, label: String, displayName: String) throws {
@@ -578,6 +615,10 @@ final class ServiceController: @unchecked Sendable {
             // requiresApproval reflects user/system policy. It is a commit warning, not evidence
             // that the newly installed App Bundle is invalid.
             guard service.status == .requiresApproval else { throw error }
+        }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while Self.isUnregistered(service.status), ContinuousClock.now < deadline {
+            Thread.sleep(forTimeInterval: 0.1)
         }
         switch service.status {
         case .enabled:
@@ -684,26 +725,17 @@ final class ServiceController: @unchecked Sendable {
         status == .notRegistered || status == .notFound
     }
 
-    private func waitForHealthSynchronously(configuration: ServiceConfiguration, timeout: TimeInterval) -> Bool {
-        guard let url = configuration.healthURL else { return false }
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            let semaphore = DispatchSemaphore(value: 0)
-            var healthy = false
-            var request = URLRequest(url: url)
-            request.timeoutInterval = 1.5
-            URLSession.shared.dataTask(with: request) { data, response, _ in
-                defer { semaphore.signal() }
-                guard (response as? HTTPURLResponse)?.statusCode == 200,
-                      let data,
-                      let payload = try? JSONDecoder().decode(HealthPayload.self, from: data) else { return }
-                healthy = payload.ok
-            }.resume()
-            _ = semaphore.wait(timeout: .now() + 2)
-            if healthy { return true }
-            Thread.sleep(forTimeInterval: 0.5)
-        }
-        return false
+    private func coreReadiness(configuration: ServiceConfiguration) async -> LifecycleCode {
+        do {
+            let data = try await localNetwork.get(configuration: configuration, path: "/healthz", timeout: 1.5)
+            guard let payload = try? JSONDecoder().decode(HealthPayload.self, from: data),
+                  payload.ok else { return .unexpectedHealth }
+            guard AppVersion.matchesHealthVersion(payload.version) else { return .versionMismatch }
+            return .ready
+        } catch let error as URLError {
+            return error.code == .cannotConnectToHost ? .connectionRefused : .healthTimeout
+        } catch LocalRuntimeError.invalidEndpoint { return .configurationInvalid }
+        catch { return .unexpectedHealth }
     }
 
     private func fetchNexusConnected() async -> Bool {
@@ -727,10 +759,9 @@ final class ServiceController: @unchecked Sendable {
 
     private func fetchHealth(url: URL) async -> HealthPayload? {
         do {
-            var request = URLRequest(url: url)
-            request.timeoutInterval = 2.5
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+            guard let configuration = ServiceConfiguration.load(from: paths.environment),
+                  configuration.healthURL == url else { return nil }
+            let data = try await localNetwork.get(configuration: configuration, path: "/healthz", timeout: 2.5)
             return try JSONDecoder().decode(HealthPayload.self, from: data)
         } catch {
             return nil
