@@ -43,7 +43,7 @@ window.addEventListener('message',e=>{
  const m=e.data;
  if(m.method==='ui/initialize')e.source.postMessage({jsonrpc:'2.0',id:m.id,result:{protocolVersion:'2026-01-26',hostInfo:{name:'live-fixture',version:'1'},hostCapabilities:{serverTools:{},message:{text:{}}},hostContext:{theme:'light',locale:'zh-CN',availableDisplayModes:['inline','fullscreen','pip'],displayMode:'inline'}}},'*');
  if(m.method==='ui/notifications/initialized')send(f,'ui/notifications/tool-result',{structuredContent:{action:'create',task_id:backend.id,task_summary:{...backend,revision:revision()}},content:[]});
- if(m.method==='ui/notifications/size-changed'&&!f.dataset.floating)f.style.height=m.params.height+'px';
+ if(m.method==='ui/notifications/size-changed'&&!f.dataset.floating&&!f.dataset.fixedSize)f.style.height=m.params.height+'px';
  if(m.method==='tools/call'){
   reads.push({frame:framesList.indexOf(f),name:m.params.name,args:m.params.arguments});
   if(m.params.name!=='task_read'||m.params.arguments.action!=='snapshot'||m.params.arguments.task_id!==backend.id){bad.push(m.params);return;}
@@ -160,8 +160,17 @@ func TestFeedbackBrowserLiveProgress(t *testing.T) {
 	// 多个保留 iframe：只有可见且 active 的卡片才有后台只读更新；销毁释放 SDK。
 	eval(`change('多实例检查','active');scrollTo(0,0);framesList[0].remove();framesList=[];document.getElementById('cards').replaceChildren();reads=[];addCards(10)`)
 	poll(`framesList.every(f=>f.contentDocument?.querySelector('[data-entity]'))`)
-	run(chromedp.Sleep(1500 * time.Millisecond))
-	check(`reads.length>0 && reads.length<10 && bad.length===0`)
+	// 等待实际布局/可见性稳定后检查请求来自哪些 iframe，不能把请求总数
+	// 当成活跃卡片数：可见卡片可能重复刷新，加载较慢时首轮也不保证在 1.5 秒内完成。
+	eval(`framesList.forEach(f=>{f.dataset.fixedSize='true';f.style.height='430px'});scrollTo(0,0);window.visibleFrames=framesList.map((f,i)=>({i,r:f.getBoundingClientRect()})).filter(x=>x.r.bottom>0&&x.r.top<innerHeight).map(x=>x.i)`)
+	check(`visibleFrames.length>0 && visibleFrames.length<10`)
+	poll(`framesList.every((f,i)=>f.contentDocument.querySelector('[data-live-state]')?.dataset.liveState===(visibleFrames.includes(i)?'live':'hidden'))`)
+	run(chromedp.Sleep(1000 * time.Millisecond))
+	eval(`reads=[]`)
+	poll(`reads.length>0`)
+	run(chromedp.Sleep(5200 * time.Millisecond))
+	check(`reads.every(r=>visibleFrames.includes(r.frame)) && bad.length===0`)
+	t.Logf("LIVE_PROGRESS_VISIBLE_FRAMES %v observed_frames=%v", eval(`visibleFrames`), eval(`[...new Set(reads.map(r=>r.frame))]`))
 	var liveUsed, released float64
 	run(chromedp.ActionFunc(func(ctx context.Context) error {
 		if err := heapprofiler.CollectGarbage().Do(ctx); err != nil {
