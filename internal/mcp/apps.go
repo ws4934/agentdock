@@ -8,7 +8,7 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	protocol "github.com/uvwt/agentdock-protocol"
-	"github.com/uvwt/agentdock-protocol/mcpapps"
+	"github.com/uvwt/agentdock/internal/mcpapps"
 )
 
 type appResourceDefinition struct {
@@ -87,6 +87,9 @@ func (s *Server) appResourceDefinitions() []appResourceDefinition {
 			HTML:        mcpapps.HTML("acp_status", "ACP status"),
 		})
 	}
+	for i := range definitions {
+		definitions[i].URI = mcpapps.ResourceURI(definitions[i].URI)
+	}
 	return definitions
 }
 
@@ -96,7 +99,7 @@ func (s *Server) UIResources() []protocol.UIResourceCapability {
 	definitions := s.appResourceDefinitions()
 	resources := make([]protocol.UIResourceCapability, 0, len(definitions))
 	for _, definition := range definitions {
-		contract, ok := protocol.UIResourceContract(definition.URI)
+		contract, ok := mcpapps.Contract(definition.URI)
 		if !ok {
 			continue
 		}

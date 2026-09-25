@@ -16,6 +16,7 @@ import (
 	"github.com/uvwt/agentdock/internal/app"
 	"github.com/uvwt/agentdock/internal/buildinfo"
 	"github.com/uvwt/agentdock/internal/config"
+	"github.com/uvwt/agentdock/internal/mcpapps"
 )
 
 type Server struct {
@@ -97,7 +98,13 @@ func (s *Server) Invoke(ctx context.Context, name string, arguments map[string]a
 		return nil, errors.New("AgentDock runtime is not initialized")
 	}
 	result, err := s.runtime.Call(ctx, name, arguments)
-	return toolEnvelope(name, result, err), nil
+	envelope := toolEnvelope(name, result, err)
+	if def, ok := s.runtime.ToolDefinition(name); ok {
+		if meta := toolResultMetadata(def, arguments, s.cfg.MCPAppsEnabled); len(meta) > 0 {
+			envelope["_meta"] = meta
+		}
+	}
+	return envelope, nil
 }
 
 func (s *Server) HTTPHandler() http.Handler {
@@ -196,8 +203,8 @@ func appendSequenceLogFields(attrs []any, result app.Result) []any {
 
 func toolMetadata(def ToolDefinition, mcpAppsEnabled bool) map[string]any {
 	meta := map[string]any{}
-	if mcpAppsEnabled && def.UIBinding != nil && def.UIBinding.Action == "" {
-		meta["ui"] = map[string]any{"resourceUri": def.UIBinding.ResourceURI}
+	if mcpAppsEnabled && def.UIBinding != nil {
+		meta["ui"] = map[string]any{"resourceUri": mcpapps.ResourceURI(def.UIBinding.ResourceURI)}
 	}
 	if len(def.FileArgRewritePaths) > 0 {
 		paths := append([]string(nil), def.FileArgRewritePaths...)
@@ -213,17 +220,12 @@ func toolMetadata(def ToolDefinition, mcpAppsEnabled bool) map[string]any {
 	return meta
 }
 
-// Action-scoped Apps UI lives on the call result rather than the tool descriptor,
-// so unrelated actions on the same action-based tool do not render a widget.
-func toolResultMetadata(def ToolDefinition, arguments map[string]any, mcpAppsEnabled bool) mcpsdk.Meta {
-	if !mcpAppsEnabled || def.UIBinding == nil || def.UIBinding.Action == "" {
+// Discovery, direct calls and bridge calls use the same content-addressed binding.
+func toolResultMetadata(def ToolDefinition, _ map[string]any, mcpAppsEnabled bool) mcpsdk.Meta {
+	if !mcpAppsEnabled || def.UIBinding == nil {
 		return nil
 	}
-	action, _ := arguments["action"].(string)
-	if action != def.UIBinding.Action {
-		return nil
-	}
-	return mcpsdk.Meta{"ui": map[string]any{"resourceUri": def.UIBinding.ResourceURI}}
+	return mcpsdk.Meta{"ui": map[string]any{"resourceUri": mcpapps.ResourceURI(def.UIBinding.ResourceURI)}}
 }
 
 func cloneBoolPointer(value *bool) *bool {

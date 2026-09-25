@@ -36,3 +36,6 @@ skill-data/
 
 # IDE
 /.idea
+
+# MCP Apps UI build dependencies; generated standalone HTML is tracked.
+/internal/mcpapps/web/node_modules/

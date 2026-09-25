@@ -1,0 +1,41 @@
+name: MCP Apps UI
+
+on:
+  push:
+    branches: [main]
+    paths: ['internal/mcpapps/**', 'internal/mcp/**', '.github/workflows/mcp-apps-ui.yml']
+  pull_request:
+    paths: ['internal/mcpapps/**', 'internal/mcp/**', '.github/workflows/mcp-apps-ui.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  feedback-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: internal/mcpapps/web/package-lock.json
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install locked UI build dependencies
+        working-directory: internal/mcpapps/web
+        run: npm ci --no-audit --no-fund
+      - name: Types, behavior, formatting and generated output
+        working-directory: internal/mcpapps/web
+        run: |
+          npm run check
+          npm test
+          npm exec prettier -- --check src test build.mjs package.json tsconfig.json
+          npm run check:generated
+      - name: MCP resource and binding contracts
+        run: go test ./internal/mcpapps ./internal/mcp -count=1 -timeout=3m
+      - name: Real isolated browser lifecycle and performance
+        run: go test -tags mcpapps_browser ./internal/mcpapps -run TestFeedbackBrowser -count=1 -timeout=3m -v

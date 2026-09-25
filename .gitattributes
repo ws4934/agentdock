@@ -4,3 +4,8 @@ go.sum text eol=lf
 *.sh text eol=lf
 *.bash text eol=lf
 .gitattributes text eol=lf
+
+# Content-addressed assets must keep identical bytes on Windows and Unix.
+internal/mcpapps/** text eol=lf
+# Bundled dependency template literals contain intentional trailing whitespace.
+internal/mcpapps/assets/*.html linguist-generated=true whitespace=-blank-at-eol

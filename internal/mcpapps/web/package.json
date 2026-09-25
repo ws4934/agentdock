@@ -1,0 +1,22 @@
+{
+  "name": "agentdock-feedback-ui",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "tsc --noEmit",
+    "check:generated": "node build.mjs --check",
+    "test": "node --import tsx --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "2.0.0",
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "prettier": "3.6.2",
+    "tsx": "4.21.0",
+    "typescript": "7.0.2"
+  }
+}

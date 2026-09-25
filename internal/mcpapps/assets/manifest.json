@@ -1,0 +1,74 @@
+{
+  "agentdock_context": {
+    "file": "agentdock_context.html",
+    "uri": "ui://agentdock/context/v2-7074d0c54067fef2.html",
+    "legacy": "ui://agentdock/context",
+    "contract": "agentdock.context.fleet.v1",
+    "sha256": "7074d0c54067fef2cbb6f3cdbede9487c73506c767e38c2e733f0987c22555bb",
+    "bytes": 502568,
+    "gzipBytes": 115407
+  },
+  "task_progress": {
+    "file": "task_progress.html",
+    "uri": "ui://agentdock/task-progress/v2-426e5de6b0cb393c.html",
+    "legacy": "ui://agentdock/task-progress",
+    "contract": "agentdock.task-progress.v1",
+    "sha256": "426e5de6b0cb393c8eddb97248a791c0e52a1f3e35e1c884101e855312881217",
+    "bytes": 502370,
+    "gzipBytes": 115297
+  },
+  "file_change": {
+    "file": "file_change.html",
+    "uri": "ui://agentdock/file-change/v2-5989bceac654b09b.html",
+    "legacy": "ui://agentdock/file-change",
+    "contract": "agentdock.file-change.v1",
+    "sha256": "5989bceac654b09b791974e6ccb0d09cd5ee1c3d84811e1e61a603f4eabd2e77",
+    "bytes": 501643,
+    "gzipBytes": 115081
+  },
+  "dynamic_mcp": {
+    "file": "dynamic_mcp.html",
+    "uri": "ui://agentdock/dynamic-mcp/v2-87857eb249894b5d.html",
+    "legacy": "ui://agentdock/dynamic-mcp",
+    "contract": "agentdock.dynamic-mcp.v1",
+    "sha256": "87857eb249894b5d3f6546ac68eb1425476faf7e924506c8955cea8e79f73513",
+    "bytes": 501892,
+    "gzipBytes": 115131
+  },
+  "artifact": {
+    "file": "artifact.html",
+    "uri": "ui://agentdock/artifact/v2-a14f856537a3379b.html",
+    "legacy": "ui://agentdock/artifact",
+    "contract": "agentdock.artifact.v1",
+    "sha256": "a14f856537a3379b1c81e57cd1776479e151765e53c3e03931fc8716fe52d6f0",
+    "bytes": 501045,
+    "gzipBytes": 114870
+  },
+  "recall": {
+    "file": "recall.html",
+    "uri": "ui://agentdock/recall/v2-a27f962b71755be4.html",
+    "legacy": "ui://agentdock/recall",
+    "contract": "agentdock.recall.v1",
+    "sha256": "a27f962b71755be4e252f486365389895a29de692e7372e575156d4300a7df8d",
+    "bytes": 501863,
+    "gzipBytes": 115112
+  },
+  "workflow": {
+    "file": "workflow.html",
+    "uri": "ui://agentdock/workflow/v2-dc28c1938f92b482.html",
+    "legacy": "ui://agentdock/workflow",
+    "contract": "agentdock.workflow.v1",
+    "sha256": "dc28c1938f92b4827d892789c483f5e539da5185e47321ca0f6f70bf8e9a4292",
+    "bytes": 501180,
+    "gzipBytes": 114846
+  },
+  "acp_status": {
+    "file": "acp_status.html",
+    "uri": "ui://agentdock/acp-status/v2-42358e58d713c2cd.html",
+    "legacy": "ui://agentdock/acp-status",
+    "contract": "agentdock.acp-status.v1",
+    "sha256": "42358e58d713c2cd0ce704c47b515ea25fafa6e736b3f1395779dca0dcb036e7",
+    "bytes": 501912,
+    "gzipBytes": 115153
+  }
+}
