@@ -27,6 +27,17 @@ import Foundation
         catch LocalRuntimeError.httpStatus(let code) { precondition(code == 302) }
         do { _ = try await client.get(configuration: config(), path: "/healthz", query: [.init(name: "fixture", value: "slow")], timeout: 0.2); preconditionFailure("timeout not enforced") }
         catch is URLError {}
+        let refs = [TaskCenterManagementRequest.Reference(id: "tsk_0123456789abcdef", revision: "tsk1:" + String(repeating: "a", count: 64))]
+        let mutation = try await client.manageTasks(configuration: config(), request: .init(action: "archive", tasks: refs))
+        precondition(mutation.changed == 1)
+        do { _ = try await client.manageTasks(configuration: config(), request: .init(action: "restore", tasks: refs)); preconditionFailure("write redirect followed") }
+        catch LocalRuntimeError.httpStatus(let code) { precondition(code == 302) }
+        do { _ = try await client.manageTasks(configuration: config(), request: .init(action: "delete", tasks: refs)); preconditionFailure("mismatched write receipt accepted") }
+        catch is CocoaError {}
+        do { _ = try await client.manageTasks(configuration: config(), request: .init(action: "delete", tasks: refs + refs)); preconditionFailure("duplicate write accepted") }
+        catch is CocoaError {}
+        let count = try await client.get(configuration: config(), path: "/healthz", query: [.init(name: "fixture", value: "write-count")])
+        precondition(String(data: count, encoding: .utf8) == "3", "a write was automatically replayed")
         print("Local runtime HTTP tests passed: local-only endpoints, authentication, no redirect, response bounds and timeout")
     }
 }

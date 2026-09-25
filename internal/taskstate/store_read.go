@@ -22,7 +22,7 @@ func (s *Store) Get(id string) (Task, error) {
 	return s.loadLocked(id)
 }
 
-func (s *Store) Delete(id string) (Task, error) {
+func (s *Store) Delete(id, expectedRevision string) (Task, error) {
 	release, err := s.acquireStoreLock()
 	if err != nil {
 		return Task{}, err
@@ -32,6 +32,13 @@ func (s *Store) Delete(id string) (Task, error) {
 	task, err := s.loadLocked(id)
 	if err != nil {
 		return Task{}, err
+	}
+	if err := checkManagementRevision(task, expectedRevision); err != nil {
+		return Task{}, err
+	}
+	// 未完成任务只能归档，不能通过管理界面伪造完成或丢失恢复点。
+	if task.Status != StatusCompleted {
+		return Task{}, ErrTaskNotCompleted
 	}
 	if err := os.Remove(filepath.Join(s.root, id+".json")); err != nil {
 		return Task{}, fmt.Errorf("delete task %s: %w", id, err)
@@ -77,7 +84,8 @@ func (s *Store) ListPage(status Status, limit int) ([]Task, bool, error) {
 			partial = true
 			continue
 		}
-		if status == "" || task.Status == status {
+		if (status == "archived" && task.ArchivedAt != nil) ||
+			(status != "archived" && task.ArchivedAt == nil && (status == "" || task.Status == status)) {
 			tasks = append(tasks, task)
 		}
 	}
@@ -158,6 +166,9 @@ func decodeTask(data []byte, label string) (Task, error) {
 	var task Task
 	if err := json.Unmarshal(data, &task); err != nil {
 		return Task{}, fmt.Errorf("decode task %s: %w", label, err)
+	}
+	if err := validateID(task.ID); err != nil || task.ID != strings.TrimSuffix(label, ".json") {
+		return Task{}, fmt.Errorf("task identity does not match its file")
 	}
 	if task.SchemaVersion != SchemaVersion {
 		return Task{}, fmt.Errorf("unsupported task schema version %d", task.SchemaVersion)

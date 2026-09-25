@@ -41,7 +41,8 @@ func runtimeAPIHandler(runtime runtimeapi.Runtime, cfg config.Config, oauthStore
 		}
 		staticOK := cfg.AuthToken != "" && authorizer.Authorized(r)
 		oauthOK := authorizedOAuth(r, cfg, oauthStore)
-		if authRequired && !staticOK && !oauthOK {
+		taskMutation := (r.Method == http.MethodPost && strings.TrimSuffix(r.URL.Path, "/") == "/internal/runtime/tasks/manage") || (r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/internal/runtime/tasks/"))
+		if (authRequired || taskMutation) && !staticOK && !oauthOK {
 			setBearerChallenge(w, cfg, r, strings.TrimSpace(r.Header.Get("Authorization")) != "")
 			writeRuntimeAPIError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
 			return
@@ -70,7 +71,7 @@ func runtimeAPIHandler(runtime runtimeapi.Runtime, cfg config.Config, oauthStore
 
 func runtimeRequestBody(r *http.Request) ([]byte, error) {
 	cleanPath := strings.TrimSuffix(r.URL.Path, "/")
-	if r.Method != http.MethodPost || (cleanPath != "/internal/runtime/mcp" && cleanPath != "/internal/runtime/evolve") {
+	if r.Method != http.MethodPost || (cleanPath != "/internal/runtime/mcp" && cleanPath != "/internal/runtime/evolve" && cleanPath != "/internal/runtime/tasks/manage") {
 		return nil, nil
 	}
 	return io.ReadAll(io.LimitReader(r.Body, 64*1024+1))
@@ -83,6 +84,8 @@ func writeRuntimeAPIHandlerError(w http.ResponseWriter, err error) {
 		switch toolErr.Category {
 		case "validation":
 			status = http.StatusBadRequest
+		case "conflict":
+			status = http.StatusConflict
 		case "not_found":
 			status = http.StatusNotFound
 		}

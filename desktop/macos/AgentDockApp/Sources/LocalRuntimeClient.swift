@@ -23,7 +23,7 @@ final class LocalRuntimeClient: @unchecked Sendable {
     deinit { session.invalidateAndCancel() }
 
     static func endpoint(configuration: ServiceConfiguration, path: String, query: [URLQueryItem] = []) throws -> URL {
-        let allowed = path == "/healthz" || path == "/internal/runtime/diagnostics" || path == "/internal/runtime/tasks"
+        let allowed = path == "/healthz" || path == "/internal/runtime/diagnostics" || path == "/internal/runtime/tasks" || path == "/internal/runtime/tasks/manage"
             || path.range(of: #"^/internal/runtime/tasks/tsk_[a-f0-9]{16}\z"#, options: .regularExpression) != nil
         guard allowed, let local = configuration.localMCPURL,
               var url = URLComponents(url: local, resolvingAgainstBaseURL: false),
@@ -35,8 +35,25 @@ final class LocalRuntimeClient: @unchecked Sendable {
     }
 
     func get(configuration: ServiceConfiguration, path: String, query: [URLQueryItem] = [], timeout: TimeInterval = 5) async throws -> Data {
+        try await request(configuration: configuration, path: path, query: query, timeout: timeout)
+    }
+
+    func manageTasks(configuration: ServiceConfiguration, request: TaskCenterManagementRequest) async throws -> TaskCenterManagementResult {
+        try request.validate()
+        guard !configuration.authToken.isEmpty else { throw LocalRuntimeError.invalidEndpoint }
+        let data = try await self.request(configuration: configuration, path: "/internal/runtime/tasks/manage", timeout: 15,
+                                          body: JSONEncoder().encode(request))
+        return try TaskCenterManagementResult.decode(data, request: request)
+    }
+
+    private func request(configuration: ServiceConfiguration, path: String, query: [URLQueryItem] = [], timeout: TimeInterval,
+                         body: Data? = nil) async throws -> Data {
         let endpoint = try Self.endpoint(configuration: configuration, path: path, query: query)
         var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
+        if let body {
+            request.httpMethod = "POST"; request.httpBody = body
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
         if path != "/healthz", !configuration.authToken.isEmpty {
             request.setValue("Bearer \(configuration.authToken)", forHTTPHeaderField: "Authorization")
         }

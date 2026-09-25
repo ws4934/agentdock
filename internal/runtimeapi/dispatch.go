@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/uvwt/agentdock/internal/app"
+	"github.com/uvwt/agentdock/internal/taskstate"
 )
 
 // MethodAllowed 返回指定 Runtime API 路径允许当前方法与否。
@@ -17,6 +18,9 @@ import (
 func MethodAllowed(method, path string) bool {
 	method = strings.ToUpper(strings.TrimSpace(method))
 	cleanPath := strings.TrimSuffix(strings.TrimSpace(path), "/")
+	if cleanPath == "/internal/runtime/tasks/manage" {
+		return method == http.MethodPost
+	}
 	if method == http.MethodGet {
 		return true
 	}
@@ -29,6 +33,9 @@ func MethodAllowed(method, path string) bool {
 
 func AllowHeader(path string) string {
 	cleanPath := strings.TrimSuffix(strings.TrimSpace(path), "/")
+	if cleanPath == "/internal/runtime/tasks/manage" {
+		return "POST"
+	}
 	if _, ok := runtimeTaskID(cleanPath); ok {
 		return "GET, DELETE"
 	}
@@ -110,6 +117,13 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 		}
 		result, err := runtime.RuntimeMCPServer(ctx, name)
 		return map[string]any(result), err
+	case path == "/internal/runtime/tasks/manage" && method == http.MethodPost:
+		args, err := decodeRuntimeTaskManagement(request.Body)
+		if err != nil {
+			return nil, err
+		}
+		result, err := runtime.RuntimeTaskManage(ctx, args)
+		return map[string]any(result), err
 	case path == "/internal/runtime/tasks":
 		limit, err := parseRuntimeTaskLimit(request.queryValue("limit"))
 		if err != nil {
@@ -118,7 +132,7 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 		result, err := runtime.RuntimeTasks(request.queryValue("status"), limit)
 		return map[string]any(result), err
 	case isTaskPath && method == http.MethodDelete:
-		result, err := runtime.RuntimeTaskDelete(taskID)
+		result, err := runtime.RuntimeTaskDelete(ctx, taskID, request.queryValue("revision"))
 		return map[string]any(result), err
 	case isTaskPath:
 		result, err := runtime.RuntimeTask(taskID)
@@ -283,4 +297,25 @@ func parseRuntimeTaskLimit(raw string) (int, error) {
 		}
 	}
 	return limit, nil
+}
+
+func decodeRuntimeTaskManagement(body []byte) (taskstate.ManagementRequest, error) {
+	var request taskstate.ManagementRequest
+	invalid := &app.ToolError{Code: "INVALID_TASK_MANAGEMENT", Message: "invalid task management request", Category: "validation"}
+	if len(body) > 64*1024 {
+		return request, invalid
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		return request, invalid
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return request, invalid
+	}
+	if err := request.Validate(); err != nil {
+		return request, invalid
+	}
+	return request, nil
 }

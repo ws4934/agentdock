@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"github.com/uvwt/agentdock/internal/app"
+	"github.com/uvwt/agentdock/internal/taskstate"
 )
 
 // Runtime 定义 Runtime API 路由真正需要的应用能力。
@@ -18,7 +19,8 @@ type Runtime interface {
 	RuntimeSkillFile(skill, path string) (app.Result, error)
 	RuntimeTasks(status string, limit int) (app.Result, error)
 	RuntimeTask(id string) (app.Result, error)
-	RuntimeTaskDelete(id string) (app.Result, error)
+	RuntimeTaskDelete(ctx context.Context, id, revision string) (app.Result, error)
+	RuntimeTaskManage(context.Context, taskstate.ManagementRequest) (app.Result, error)
 	RuntimeCapabilities(context.Context, bool) (app.Result, error)
 	RuntimeMCPServers(context.Context) (app.Result, error)
 	RuntimeMCPServer(context.Context, string) (app.Result, error)

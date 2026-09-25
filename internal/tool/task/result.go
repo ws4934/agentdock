@@ -61,6 +61,9 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		"condition_count": len(task.Conditions), "condition_refs": conditionRefs, "review_status": reviewStatus(task),
 		"updated_at": task.UpdatedAt,
 	}
+	if task.ArchivedAt != nil {
+		summary["archived_at"] = task.ArchivedAt
+	}
 	if currentStep != nil {
 		summary["current_step"] = currentStep
 	}
@@ -152,6 +155,12 @@ func compactTemplateSummary(template taskstate.Template) map[string]any {
 }
 
 func taskToolError(err error) error {
+	if errors.Is(err, taskstate.ErrTaskConflict) {
+		return toolErrorDetails("TASK_CONFLICT", "task changed; refresh before managing it", "conflict", nil)
+	}
+	if errors.Is(err, taskstate.ErrTaskNotCompleted) {
+		return toolErrorDetails("TASK_NOT_COMPLETED", "unfinished tasks can be archived, not deleted", "conflict", nil)
+	}
 	if errors.Is(err, taskstate.ErrTaskNotFound) {
 		return toolErrorDetails("TASK_NOT_FOUND", err.Error(), "not_found", map[string]any{"retryable": false})
 	}

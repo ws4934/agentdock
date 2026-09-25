@@ -129,9 +129,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
 
     func present(status: ServiceStatus) {
         if controlsLocked { refreshServiceStatus(status) } else { update(status: status) }
-        showWindow(nil)
-        window?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        ManagementWindowPresenter.present(self)
     }
 
     func update(status: ServiceStatus) {

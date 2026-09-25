@@ -199,9 +199,16 @@ func TestRuntimeAPIRejectsInvalidTaskQuery(t *testing.T) {
 
 func TestRuntimeAPIDeletesOnlySelectedTask(t *testing.T) {
 	cfg := testConfig(t)
+	cfg.AuthToken = "synthetic-delete-token"
 	runtime, err := app.NewRuntime(cfg)
 	if err != nil {
 		t.Fatalf("new runtime: %v", err)
+	}
+	defer runtime.Close()
+	authenticated := func(method, path string) *http.Request {
+		req := httptest.NewRequest(method, path, nil)
+		req.Header.Set("Authorization", "Bearer "+cfg.AuthToken)
+		return req
 	}
 	createTask := func(title string) string {
 		t.Helper()
@@ -223,10 +230,27 @@ func TestRuntimeAPIDeletesOnlySelectedTask(t *testing.T) {
 	}
 	deletedTaskID := createTask("Delete me")
 	keptTaskID := createTask("Keep me")
+	for _, args := range []map[string]any{
+		{"action": "checkpoint", "task_id": deletedTaskID, "step_id": "verify", "status": "completed", "summary": "fixture verified"},
+		{"action": "final_review", "task_id": deletedTaskID, "status": "pass", "summary": "fixture verified", "verified": []string{"fixture ready for deletion"}},
+		{"action": "complete", "task_id": deletedTaskID},
+	} {
+		if _, err := runtime.Call(context.Background(), "task_manage", args); err != nil {
+			t.Fatal(err)
+		}
+	}
+	task, err := runtime.RuntimeTask(deletedTaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision, ok := task["revision"].(string)
+	if !ok || revision == "" {
+		t.Fatal("missing delete revision")
+	}
 
 	handler := runtimeAPIHandler(runtime, cfg, auth.NewOAuthStore())
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodDelete, "/internal/runtime/tasks/"+deletedTaskID, nil))
+	handler.ServeHTTP(recorder, authenticated(http.MethodDelete, "/internal/runtime/tasks/"+deletedTaskID+"?revision="+url.QueryEscape(revision)))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("delete status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
 	}
@@ -245,12 +269,12 @@ func TestRuntimeAPIDeletesOnlySelectedTask(t *testing.T) {
 	}
 
 	deletedRecorder := httptest.NewRecorder()
-	handler.ServeHTTP(deletedRecorder, httptest.NewRequest(http.MethodGet, "/internal/runtime/tasks/"+deletedTaskID, nil))
+	handler.ServeHTTP(deletedRecorder, authenticated(http.MethodGet, "/internal/runtime/tasks/"+deletedTaskID))
 	if deletedRecorder.Code != http.StatusNotFound || !strings.Contains(deletedRecorder.Body.String(), `"code":"TASK_NOT_FOUND"`) {
 		t.Fatalf("deleted task lookup status=%d body=%s", deletedRecorder.Code, deletedRecorder.Body.String())
 	}
 	keptRecorder := httptest.NewRecorder()
-	handler.ServeHTTP(keptRecorder, httptest.NewRequest(http.MethodGet, "/internal/runtime/tasks/"+keptTaskID, nil))
+	handler.ServeHTTP(keptRecorder, authenticated(http.MethodGet, "/internal/runtime/tasks/"+keptTaskID))
 	if keptRecorder.Code != http.StatusOK {
 		t.Fatalf("kept task lookup status=%d body=%s", keptRecorder.Code, keptRecorder.Body.String())
 	}

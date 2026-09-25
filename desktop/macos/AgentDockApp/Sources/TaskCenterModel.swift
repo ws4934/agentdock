@@ -18,6 +18,8 @@ struct TaskCenterItem: Decodable {
     var summary: String?
     var blocker: String?
     var updated_at: String?
+    var revision: String?
+    var archived_at: String?
     var step_count: Int?
     var completed_step_count: Int?
     var steps: [Step]?
@@ -29,9 +31,16 @@ struct TaskCenterItem: Decodable {
     static func validID(_ id: String) -> Bool {
         id.utf8.count == 20 && id.range(of: #"^tsk_[a-f0-9]{16}$"#, options: .regularExpression) != nil
     }
+    var isArchived: Bool { archived_at != nil }
+    var canDelete: Bool { status == "completed" && managementReference != nil }
+    var managementReference: TaskCenterManagementRequest.Reference? {
+        guard let revision, TaskCenterManagementRequest.validRevision(revision) else { return nil }
+        return .init(id: id, revision: revision)
+    }
     func validate() throws {
         guard Self.validID(id), title.count <= 4096, (steps?.count ?? 0) <= 12,
-              ["active", "blocked", "completed"].contains(status) else { throw CocoaError(.coderReadCorrupt) }
+              ["active", "blocked", "completed"].contains(status),
+              revision == nil || TaskCenterManagementRequest.validRevision(revision!) else { throw CocoaError(.coderReadCorrupt) }
     }
     // 只插入严格校验的 ID，不把任务标题、项目文件或任意历史文本变成指令。
     var continuationPrompt: String {
@@ -39,6 +48,10 @@ struct TaskCenterItem: Decodable {
         return L10n.format("Continue AgentDock task %@. First read its current task state and existing job receipts. Verify the project and source revision, then continue only unfinished work within the original approved scope. Do not replay completed or unknown executions. If the task is completed, report its result instead of rerunning it.", id)
     }
     var statusText: String {
+        let prefix = isArchived ? L10n.text("Archived") + " · " : ""
+        return prefix + progressText
+    }
+    private var progressText: String {
         switch status {
         case "active": return L10n.text("In progress")
         case "blocked": return L10n.text("Blocked")
@@ -90,6 +103,7 @@ struct TaskCenterPage: Decodable {
     static func decodeTask(_ data: Data, expectedID: String) throws -> TaskCenterItem {
         struct Envelope: Decodable {
             let ok: Bool; let task: TaskCenterItem
+            var revision: String?
             var job_receipts: [TaskCenterItem.Receipt]?
             var jobs_available: Bool?
             var jobs_partial: Bool?
@@ -99,9 +113,61 @@ struct TaskCenterPage: Decodable {
         guard value.ok, value.task.id == expectedID, (value.job_receipts?.count ?? 0) <= 10 else { throw CocoaError(.coderReadCorrupt) }
         try value.task.validate()
         var item = value.task
+        item.revision = value.revision ?? item.revision
+        try item.validate()
         item.job_receipts = value.job_receipts ?? []
         item.jobs_available = value.jobs_available
         item.jobs_partial = value.jobs_partial
         return item
+    }
+}
+
+
+struct TaskCenterManagementRequest: Encodable {
+    struct Reference: Encodable { let id: String; let revision: String }
+    let action: String
+    let tasks: [Reference]
+    static func validRevision(_ value: String) -> Bool {
+        value.utf8.count == 69 && value.range(of: #"^tsk1:[a-f0-9]{64}$"#, options: .regularExpression) != nil
+    }
+    func validate() throws {
+        guard ["archive", "restore", "delete"].contains(action), !tasks.isEmpty, tasks.count <= 200,
+              Set(tasks.map(\.id)).count == tasks.count,
+              tasks.allSatisfy({ TaskCenterItem.validID($0.id) && Self.validRevision($0.revision) }) else { throw CocoaError(.coderReadCorrupt) }
+    }
+}
+
+struct TaskCenterManagementResult: Decodable {
+    struct Outcome: Decodable { let task_id: String; let ok: Bool; var code: String? }
+    let ok: Bool
+    let action: String
+    let results: [Outcome]
+    let changed: Int
+    let failed: Int
+    static func decode(_ data: Data, request: TaskCenterManagementRequest) throws -> Self {
+        guard data.count <= 512 * 1024 else { throw CocoaError(.fileReadTooLarge) }
+        let value = try JSONDecoder().decode(Self.self, from: data)
+        guard value.ok, value.action == request.action, value.results.count == request.tasks.count,
+              Set(value.results.map(\.task_id)) == Set(request.tasks.map(\.id)),
+              value.changed == value.results.filter({ $0.ok }).count, value.failed == value.results.filter({ !$0.ok }).count else {
+            throw CocoaError(.coderReadCorrupt)
+        }
+        return value
+    }
+    var summary: String {
+        var lines = [L10n.format("%d tasks updated · %d not changed", changed, failed)]
+        for result in results.filter({ !$0.ok }).prefix(8) {
+            let reason: String
+            switch result.code {
+            case "TASK_CONFLICT": reason = L10n.text("Task changed. Refresh and select it again.")
+            case "TASK_NOT_COMPLETED": reason = L10n.text("Unfinished tasks can be archived, not deleted.")
+            case "TASK_JOBS_BUSY": reason = L10n.text("A related job is running or has an unknown outcome.")
+            case "TASK_JOBS_UNAVAILABLE": reason = L10n.text("Job state could not be verified; deletion was refused.")
+            case "TASK_NOT_FOUND": reason = L10n.text("Task no longer exists.")
+            default: reason = L10n.text("Task could not be changed. Refresh before trying again.")
+            }
+            lines.append(result.task_id + ": " + reason)
+        }
+        return lines.joined(separator: "\n")
     }
 }

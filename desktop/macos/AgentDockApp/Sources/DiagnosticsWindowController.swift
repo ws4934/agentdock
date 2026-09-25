@@ -3,6 +3,7 @@ import Foundation
 
 @MainActor final class DiagnosticsWindowController: NSWindowController, NSWindowDelegate {
     private let service: ServiceController
+    private let presentWindow: @MainActor (NSWindowController) -> Void
     private let client = LocalRuntimeClient()
     private let text = NSTextView()
     private let coreState = ManagementUI.label("—", size: 17, weight: .semibold)
@@ -17,13 +18,15 @@ import Foundation
     private var publicReport = ""
     private var generation = 0
 
-    init(service: ServiceController) {
+    init(service: ServiceController, presentWindow: @escaping @MainActor (NSWindowController) -> Void = { ManagementWindowPresenter.present($0) }) {
         self.service = service
+        self.presentWindow = presentWindow
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 790, height: 600),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         super.init(window: window)
         window.title = L10n.text("Connection diagnostics"); window.minSize = NSSize(width: 690, height: 460)
         window.isReleasedWhenClosed = false; window.delegate = self
+        window.center()
         window.setFrameAutosaveName("AgentDockDiagnostics")
         let content = NSView(); window.contentView = content
         let heading = ManagementUI.column([
@@ -58,7 +61,7 @@ import Foundation
         ])
     }
     required init?(coder: NSCoder) { nil }
-    func present() { showWindow(nil); window?.makeKeyAndOrderFront(nil); refresh() }
+    func present() { presentWindow(self); refresh() }
     func windowWillClose(_ notification: Notification) {
         generation += 1; task?.cancel(); publicTask?.cancel(); task = nil; publicTask = nil
         displayedReport = nil; saveButton.isEnabled = false

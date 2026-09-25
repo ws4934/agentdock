@@ -613,3 +613,31 @@
 "Local Core diagnostics are unavailable. Confirm the service is running. No logs, credentials or project files were read." = "Local Core diagnostics are unavailable. Confirm the service is running. No logs, credentials or project files were read.";
 "Diagnostics" = "Diagnostics";
 "Tools" = "Tools";
+
+// Task center management
+"Archived" = "Archived";
+"Archive selected" = "Archive selected";
+"Restore selected" = "Restore selected";
+"Delete selected…" = "Delete selected…";
+"Clear displayed completed…" = "Clear displayed completed…";
+"%d saved tasks" = "%d saved tasks";
+"%d selected" = "%d selected";
+"%d tasks selected" = "%d tasks selected";
+"Use Command-click or Shift-click to select multiple tasks." = "Use Command-click or Shift-click to select multiple tasks.";
+"Only the completed tasks in this displayed, filtered list are selected. Older or hidden tasks are not affected." = "Only the completed tasks in this displayed, filtered list are selected. Older or hidden tasks are not affected.";
+"Archive only hides a task; it does not stop execution. Deletion removes completed task records, not job receipts, logs or delivered files." = "Archive only hides a task; it does not stop execution. Deletion removes completed task records, not job receipts, logs or delivered files.";
+"Unfinished tasks can be archived, not deleted." = "Unfinished tasks can be archived, not deleted.";
+"%d tasks updated · %d not changed" = "%d tasks updated · %d not changed";
+"Task changed. Refresh and select it again." = "Task changed. Refresh and select it again.";
+"A related job is running or has an unknown outcome." = "A related job is running or has an unknown outcome.";
+"Job state could not be verified; deletion was refused." = "Job state could not be verified; deletion was refused.";
+"Task no longer exists." = "Task no longer exists.";
+"Task could not be changed. Refresh before trying again." = "Task could not be changed. Refresh before trying again.";
+"Delete %d completed task records?" = "Delete %d completed task records?";
+"Archive %d tasks?" = "Archive %d tasks?";
+"Restore %d tasks?" = "Restore %d tasks?";
+"This cannot be undone. Only the selected task records are removed. Job receipts, execution logs, frozen deliveries and files are kept. Running or unknown jobs prevent deletion." = "This cannot be undone. Only the selected task records are removed. Job receipts, execution logs, frozen deliveries and files are kept. Running or unknown jobs prevent deletion.";
+"Archive only changes list visibility. Progress, exact-ID access and job execution are unchanged; archived tasks can be restored here." = "Archive only changes list visibility. Progress, exact-ID access and job execution are unchanged; archived tasks can be restored here.";
+"Archive" = "Archive";
+"Restore" = "Restore";
+"The operation result could not be confirmed. The list will be refreshed; no write request will be retried automatically." = "The operation result could not be confirmed. The list will be refreshed; no write request will be retried automatically.";

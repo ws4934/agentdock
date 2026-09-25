@@ -59,8 +59,8 @@ func (r *Runtime) RuntimeTask(id string) (Result, error) {
 	return result, nil
 }
 
-func (r *Runtime) RuntimeTaskDelete(id string) (Result, error) {
-	return r.taskTools.RuntimeTaskDelete(id)
+func (r *Runtime) RuntimeTaskDelete(ctx context.Context, id, revision string) (Result, error) {
+	return r.deleteIdleTask(ctx, id, revision)
 }
 
 func (r *Runtime) RuntimeCapabilities(ctx context.Context, refresh bool) (Result, error) {

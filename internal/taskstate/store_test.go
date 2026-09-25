@@ -330,7 +330,14 @@ func TestDeleteRemovesOnlySelectedTask(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	deleted, err := store.Delete(first.ID)
+	if _, err := store.FinalReview(first.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "verified", VerifiedFacts: []string{"fixture verified"}}); err != nil {
+		t.Fatal(err)
+	}
+	first, err = store.Complete(first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deleted, err := store.Delete(first.ID, ManagementRevision(first))
 	if err != nil {
 		t.Fatal(err)
 	}

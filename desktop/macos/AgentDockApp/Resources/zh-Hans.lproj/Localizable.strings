@@ -613,3 +613,31 @@
 "Local Core diagnostics are unavailable. Confirm the service is running. No logs, credentials or project files were read." = "无法读取本机 Core 诊断，请确认服务正在运行。本次未读取日志、凭据或项目文件。";
 "Diagnostics" = "诊断";
 "Tools" = "工具";
+
+// Task center management
+"Archived" = "已归档";
+"Archive selected" = "归档所选";
+"Restore selected" = "恢复所选";
+"Delete selected…" = "删除所选…";
+"Clear displayed completed…" = "清理当前已完成…";
+"%d saved tasks" = "%d 项已保存任务";
+"%d selected" = "已选 %d 项";
+"%d tasks selected" = "已选择 %d 项任务";
+"Use Command-click or Shift-click to select multiple tasks." = "按住 Command 或 Shift 点击可多选任务。";
+"Only the completed tasks in this displayed, filtered list are selected. Older or hidden tasks are not affected." = "仅选择当前筛选列表中显示的已完成任务，不影响更早或隐藏的任务。";
+"Archive only hides a task; it does not stop execution. Deletion removes completed task records, not job receipts, logs or delivered files." = "归档仅隐藏任务，不会停止执行。删除只清除已完成任务记录，保留执行回执、日志和交付文件。";
+"Unfinished tasks can be archived, not deleted." = "未完成的任务可归档，不能删除。";
+"%d tasks updated · %d not changed" = "已处理 %d 项 · 未更改 %d 项";
+"Task changed. Refresh and select it again." = "任务已发生变化，请刷新后重新选择。";
+"A related job is running or has an unknown outcome." = "关联执行仍在运行或结果未知，不能删除。";
+"Job state could not be verified; deletion was refused." = "无法确认执行状态，已拒绝删除。";
+"Task no longer exists." = "任务记录已不存在。";
+"Task could not be changed. Refresh before trying again." = "无法更改任务，请刷新后再操作。";
+"Delete %d completed task records?" = "删除 %d 项已完成任务记录？";
+"Archive %d tasks?" = "归档 %d 项任务？";
+"Restore %d tasks?" = "恢复 %d 项任务？";
+"This cannot be undone. Only the selected task records are removed. Job receipts, execution logs, frozen deliveries and files are kept. Running or unknown jobs prevent deletion." = "此操作无法撤销，只删除所选任务记录。执行回执、日志、已冻结交付和文件都会保留。有关联执行仍在运行或结果未知时，会拒绝删除。";
+"Archive only changes list visibility. Progress, exact-ID access and job execution are unchanged; archived tasks can be restored here." = "归档只改变列表可见性，不改变任务进度、通过编号读取任务的能力或实际执行。可在“已归档”中恢复。";
+"Archive" = "归档";
+"Restore" = "恢复";
+"The operation result could not be confirmed. The list will be refreshed; no write request will be retried automatically." = "暂时无法确认操作结果，正在重新读取列表；不会自动重试写入。";

@@ -26,6 +26,24 @@ import Foundation
         precondition(!withReceipt.continuationPrompt.contains("job-synthetic"))
         do { _ = try TaskCenterPage.decodeTask(Data(task.utf8), expectedID: "tsk_ffffffffffffffff"); preconditionFailure("wrong selection accepted") } catch {}
         do { _ = try TaskCenterPage.decode(Data(repeating: 32, count: 512 * 1024 + 1)); preconditionFailure("unbounded response accepted") } catch {}
+        let revision = "tsk1:" + String(repeating: "a", count: 64)
+        let manageable = TaskCenterItem(id: id, title: "completed", status: "completed", revision: revision, archived_at: "2026-09-25T00:00:00Z")
+        try manageable.validate()
+        precondition(manageable.isArchived && manageable.canDelete)
+        precondition(!completed.canDelete, "unversioned snapshots must remain read-only")
+        precondition(manageable.statusText.contains("Archived") && manageable.continuationPrompt.contains(id))
+        let request = TaskCenterManagementRequest(action: "delete", tasks: [manageable.managementReference!])
+        try request.validate()
+        for invalid in ["", "tsk1:" + String(repeating: "a", count: 63), revision + "\n"] { precondition(!TaskCenterManagementRequest.validRevision(invalid)) }
+        for invalid in [TaskCenterManagementRequest(action: "delete", tasks: []), TaskCenterManagementRequest(action: "complete", tasks: request.tasks), TaskCenterManagementRequest(action: "delete", tasks: request.tasks + request.tasks)] {
+            do { try invalid.validate(); preconditionFailure("invalid management request accepted") } catch {}
+        }
+        let outcome = "{\"ok\":true,\"action\":\"delete\",\"changed\":0,\"failed\":1,\"results\":[{\"task_id\":\"\(id)\",\"ok\":false,\"code\":\"TASK_JOBS_BUSY\"}]}"
+        let result = try TaskCenterManagementResult.decode(Data(outcome.utf8), request: request)
+        precondition(result.changed == 0 && result.summary.contains("unknown outcome"))
+        for invalid in [outcome.replacingOccurrences(of: id, with: "tsk_ffffffffffffffff"), outcome.replacingOccurrences(of: "\"changed\":0", with: "\"changed\":1"), outcome.replacingOccurrences(of: "\"action\":\"delete\"", with: "\"action\":\"archive\"")] {
+            do { _ = try TaskCenterManagementResult.decode(Data(invalid.utf8), request: request); preconditionFailure("mismatched operation result accepted") } catch {}
+        }
         print("Task center models passed: identity validation, prompt isolation, partial inventory, duplicate rejection, exact selection and response bounds")
     }
 }

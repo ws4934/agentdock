@@ -95,6 +95,7 @@ swiftc \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/UpdateProgressEvent.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ServiceLifecycle.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/LocalRuntimeClient.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/TaskCenterModel.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ServiceController.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/InstallerRunner.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Tests/ServiceControllerValidationTests.swift" \

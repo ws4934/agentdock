@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/uvwt/agentdock/internal/app"
+	"github.com/uvwt/agentdock/internal/taskstate"
 )
 
 type runtimeStub struct {
@@ -26,8 +27,13 @@ func (r *runtimeStub) RuntimeTasks(status string, limit int) (app.Result, error)
 	r.taskStatus, r.taskLimit = status, limit
 	return app.Result{"status": status, "limit": limit}, nil
 }
-func (r *runtimeStub) RuntimeTask(string) (app.Result, error)       { return app.Result{}, nil }
-func (r *runtimeStub) RuntimeTaskDelete(string) (app.Result, error) { return app.Result{}, nil }
+func (r *runtimeStub) RuntimeTask(string) (app.Result, error) { return app.Result{}, nil }
+func (r *runtimeStub) RuntimeTaskDelete(context.Context, string, string) (app.Result, error) {
+	return app.Result{}, nil
+}
+func (r *runtimeStub) RuntimeTaskManage(context.Context, taskstate.ManagementRequest) (app.Result, error) {
+	return app.Result{}, nil
+}
 func (r *runtimeStub) RuntimeCapabilities(context.Context, bool) (app.Result, error) {
 	return app.Result{}, nil
 }
