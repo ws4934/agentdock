@@ -21,7 +21,15 @@ type standardRunner struct {
 }
 
 func startStandardRunner(cmd *exec.Cmd, stdout, stderr io.Writer) (*standardRunner, error) {
-	processcontrol.Configure(cmd)
+	return startStandardRunnerNamed(cmd, stdout, stderr, "")
+}
+
+func startStandardRunnerNamed(cmd *exec.Cmd, stdout, stderr io.Writer, name string) (*standardRunner, error) {
+	if name == "" {
+		processcontrol.Configure(cmd)
+	} else {
+		processcontrol.ConfigureManaged(cmd)
+	}
 	// command runner 统一拥有进程树取消权。CommandContext 默认只杀直接子进程，
 	// 会和这里的进程组/Job Object 终止并发竞争；保留 ctx 的启动前检查，
 	// 但关闭 os/exec 自带的直接子进程 Cancel，运行期取消由 Session watcher 处理。
@@ -37,7 +45,12 @@ func startStandardRunner(cmd *exec.Cmd, stdout, stderr io.Writer) (*standardRunn
 		_ = stdin.Close()
 		return nil, err
 	}
-	controller, err := processcontrol.Attach(cmd)
+	var controller *processcontrol.Controller
+	if name == "" {
+		controller, err = processcontrol.Attach(cmd)
+	} else {
+		controller, err = processcontrol.AttachNamed(cmd, name)
+	}
 	if err != nil {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()

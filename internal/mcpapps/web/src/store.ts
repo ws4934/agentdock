@@ -39,6 +39,7 @@ export class Store {
   }
   get = (): Snapshot => this.snapshot;
   subscribe = (listener: () => void): (() => void) => {
+    if (this.ended) return () => {};
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   };
@@ -89,6 +90,11 @@ export class Store {
         /* 保留普通文本结果。 */
       }
     }
+    // MCP 线协议的大 content 只在 envelope 存一次。旧资源显式读取时，在
+    // 归一化的短暂窗口提供同一个引用，不复制或长期保留原始正文。
+    const remote = object(d.result);
+    if (remote.content_location === "mcp.content")
+      d = { ...d, result: { ...remote, content: e.content } };
     try {
       const project = (locale: Locale): Model =>
         Object.keys(d).length
@@ -125,6 +131,8 @@ export class Store {
   dispose(): void {
     this.ended = true;
     this.models = {};
+    this.snapshot = { phase: "empty", locale: this.snapshot.locale };
+    this.key = "";
     this.listeners.clear();
   }
 }

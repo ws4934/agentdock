@@ -16,11 +16,12 @@ type outputContractCoverageEntry struct {
 // ToolDefinitions 是公开工具定义的单一事实源，tools/list 从同一 registry 派生；新增工具但忘记补契约测试时，门禁会直接失败。
 var outputContractCoverageInventory = map[string]outputContractCoverageEntry{
 	"job_observe":         {Variants: []string{"list", "status", "logs", "evidence"}},
-	"job_control":         {Variants: []string{"cancel", "archive"}},
+	"job_control":         {Variants: []string{"cancel", "archive", "abandon"}},
 	"validation_run":      {Variants: []string{"success"}},
 	"read_files":          {Variants: []string{"success"}},
 	"search_and_read":     {Variants: []string{"success"}},
 	"work_result_read":    {Variants: []string{"success"}},
+	"work_result_show":    {Variants: []string{"success"}},
 	"work_result_freeze":  {Variants: []string{"success"}},
 	"runtime_diagnostics": {Variants: []string{"success"}},
 	"diagnostic_export":   {Variants: []string{"success"}},

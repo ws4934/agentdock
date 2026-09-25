@@ -35,7 +35,7 @@ func (r *Runtime) agentDockContext(ctx context.Context, nexusLocalOnly bool) (Re
 			"需要跨 Core 重启保留的非交互长任务，可显式使用 exec_command execution_mode=managed 并提供稳定 request_id；断线后先用同一 request_id 找回回执或 job_observe，不能新建执行来猜测恢复。日志 offset 是调用方维护的字节位置，取消以终态回执为准。",
 			"验证优先使用 validation_run 的 go_test、JUnit 或 process 适配，并通过 job_observe action=evidence 检查源码新鲜度；进程退出成功不等于测试执行、覆盖充分或当前源码已验证。",
 			"多个源码范围可用 read_files；搜索后需要上下文时可用 search_and_read。修改应保留调用方要求的 expected_read_revision / expected_revisions；冲突后重新读取，不能删除护栏重试。",
-			"重要任务可用 work_result_read 聚合任务、执行证据和文件；完成后用 work_result_freeze 保存不可变交付，提供明确源码版本与 request_id。历史交付不是当前工作区，也不是文件永久备份。code_navigate 和 worktree_manage 的项目边界不等于进程沙箱。",
+			"重要任务可用 work_result_read 聚合任务、执行证据和文件（仅数据，不生成卡片）；显式可视化或最终交付用 work_result_show，不要逐个检查点展示；完成后用 work_result_freeze 保存不可变交付，提供明确源码版本与 request_id。历史交付不是当前工作区，也不是文件永久备份。code_navigate 和 worktree_manage 的项目边界不等于进程沙箱。",
 			"先根据 Skill 索引的 name 和 description 选择相关 Skill，再用 read_file 读取其 file 指向的 SKILL.md；Skill 只提供流程与约束，实际操作使用命令、文件、浏览器或 MCP 工具。",
 			"选择 Skill 时优先使用 skills 中的 AgentDock Skill；common_skills 是低优先级通用 Skill 索引，同名时始终优先 skills。若 common_skills.truncated=true 且当前索引未命中，可直接 list_dir 查看 common_skills.root，再用 read_file 读取对应 SKILL.md。",
 			"AgentDock 自带工具直接调用；动态 MCP 工具先用 mcp_tool_search 查找、mcp_tool_inspect 读取 schema，再用 mcp_tool_call 执行。",

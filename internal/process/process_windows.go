@@ -44,10 +44,14 @@ func Attach(cmd *exec.Cmd) (*Controller, error) {
 }
 
 func AttachPID(pid int) (*Controller, error) {
+	return attachNamedPID(pid, "")
+}
+
+func attachNamedPID(pid int, name string) (*Controller, error) {
 	if pid <= 0 {
 		return nil, fmt.Errorf("attach process controller: invalid pid %d", pid)
 	}
-	job, err := windows.CreateJobObject(nil, nil)
+	job, err := ownedJob(name)
 	if err != nil {
 		return nil, fmt.Errorf("create Windows Job Object: %w", err)
 	}

@@ -40,9 +40,9 @@ func InputSchema(name string) (map[string]any, bool) {
 		return contract.InputObject(props, "permission"), true
 	case ToolSnapshot:
 		props["mode"] = enum("Default background: omit window_id for metadata-only discovery, then select a window. Foreground explicitly permits global desktop control.", "background", "foreground")
-		props["window_id"] = contract.BoundedInteger("Background target window ID from state.windows; required for image, AX, and actions.", 1, 4294967295)
+		props["window_id"] = contract.BoundedInteger64("Background target window ID from state.windows; required for image, AX, and actions.", 1, 4294967295)
 		props["pid"] = contract.BoundedInteger("Optional expected owner PID for background window_id.", 1, 2147483647)
-		props["display_id"] = contract.BoundedInteger("Display ID from a previous snapshot; default selects the main display.", 0, 4294967295)
+		props["display_id"] = contract.BoundedInteger64("Display ID from a previous snapshot; default selects the main display.", 0, 4294967295)
 		props["screenshot"] = contract.Boolean("Include an in-memory JPEG as MCP image content. Default true for a selected window or explicit foreground mode; default discovery never captures an image. Requires Screen Recording permission; no image is persisted or published.")
 		props["accessibility"] = contract.Boolean("Include a bounded AX tree of the selected background window or explicit foreground app. Default false. Requires Accessibility permission; values and secure-field labels are not read.")
 		props["max_dimension"] = contract.BoundedInteger("Maximum screenshot edge in pixels. Default 1568.", 128, 2048)

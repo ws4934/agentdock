@@ -83,14 +83,14 @@ func commitStagedPatchWithFileOps(staged map[string]stagedPatchFile, rename, ins
 		if item.file.OriginalExists {
 			backupPath, err := reservePatchPath(filepath.Dir(item.file.Abs), ".agentdock-patch-backup-*")
 			if err != nil {
-				return rollbackPatch(prepared, createdDirs, rename, fmt.Errorf("reserve patch backup for %s: %w", item.file.Display, err))
+				return rollbackPatch(prepared, createdDirs, renameNoReplace, fmt.Errorf("reserve patch backup for %s: %w", item.file.Display, err))
 			}
 			if err := rename(item.file.Abs, backupPath); err != nil {
-				return rollbackPatch(prepared, createdDirs, rename, fmt.Errorf("backup patch target %s: %w", item.file.Display, err))
+				return rollbackPatch(prepared, createdDirs, renameNoReplace, fmt.Errorf("backup patch target %s: %w", item.file.Display, err))
 			}
 			item.backupPath = backupPath
 			if err := verifyPatchBackup(*item); err != nil {
-				return rollbackPatch(prepared, createdDirs, rename, err)
+				return rollbackPatch(prepared, createdDirs, renameNoReplace, err)
 			}
 		}
 	}
@@ -102,11 +102,11 @@ func commitStagedPatchWithFileOps(staged map[string]stagedPatchFile, rename, ins
 		// 备份后原路径必须仍为空；平台 no-replace rename 提供“目标存在则失败”
 		// 语义，避免外部程序在提交窗口重建文件后被静默覆盖。
 		if err := installNoReplace(item.tempPath, item.file.Abs); err != nil {
-			return rollbackPatch(prepared, createdDirs, rename, toolErrorDetails("PATCH_CONFLICT", "patch target was created concurrently or cannot be installed without replacing an existing file", "runtime", map[string]any{"path": item.file.Display, "reason": err.Error()}))
+			return rollbackPatch(prepared, createdDirs, renameNoReplace, toolErrorDetails("PATCH_CONFLICT", "patch target was created concurrently or cannot be installed without replacing an existing file", "runtime", map[string]any{"path": item.file.Display, "reason": err.Error()}))
 		}
 		item.installed = true
 		if err := os.Remove(item.tempPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return rollbackPatch(prepared, createdDirs, rename, fmt.Errorf("remove installed patch temp for %s: %w", item.file.Display, err))
+			return rollbackPatch(prepared, createdDirs, renameNoReplace, fmt.Errorf("remove installed patch temp for %s: %w", item.file.Display, err))
 		}
 		item.tempPath = ""
 	}
@@ -226,36 +226,22 @@ func reservePatchPath(dir, pattern string) (string, error) {
 	return path, nil
 }
 
-func rollbackPatch(prepared []preparedPatchFile, createdDirs []string, rename func(string, string) error, cause error) error {
+// 回滚也必须使用原子的 no-replace 恢复，不能依赖先 Lstat 再覆盖 rename。
+func rollbackPatch(prepared []preparedPatchFile, createdDirs []string, restoreNoReplace func(string, string) error, cause error) error {
 	errs := []error{cause}
 	for i := len(prepared) - 1; i >= 0; i-- {
 		item := &prepared[i]
-		canRestoreBackup := true
+		canRestore := true
 		if item.installed {
-			switch inspectInstalledPatchFile(*item) {
-			case installedPatchChanged:
-				message := fmt.Sprintf("patched target %s changed during rollback; preserving current file", item.file.Display)
-				if item.backupPath != "" {
-					message += " and original backup at " + item.backupPath
-				}
-				errs = append(errs, errors.New(message))
-				canRestoreBackup = false
-			case installedPatchUnchanged:
-				if err := os.Remove(item.file.Abs); err != nil && !errors.Is(err, os.ErrNotExist) {
-					errs = append(errs, fmt.Errorf("remove partially installed %s: %w", item.file.Display, err))
-					canRestoreBackup = false
-				}
-			case installedPatchMissing:
-				// 外部删除了事务写入文件；原路径为空时可以直接恢复备份。
+			var err error
+			canRestore, err = withdrawInstalledPatch(*item, restoreNoReplace)
+			if err != nil {
+				errs = append(errs, err)
 			}
 		}
-		if item.backupPath != "" && canRestoreBackup {
-			if _, err := os.Lstat(item.file.Abs); err == nil {
-				errs = append(errs, fmt.Errorf("cannot restore patch backup for %s without overwriting a concurrent file; original retained at %s", item.file.Display, item.backupPath))
-			} else if !errors.Is(err, os.ErrNotExist) {
-				errs = append(errs, fmt.Errorf("check patch restore target %s: %w", item.file.Display, err))
-			} else if err := rename(item.backupPath, item.file.Abs); err != nil {
-				errs = append(errs, fmt.Errorf("restore patch backup %s from %s: %w", item.file.Display, item.backupPath, err))
+		if item.backupPath != "" && canRestore {
+			if err := restoreNoReplace(item.backupPath, item.file.Abs); err != nil {
+				errs = append(errs, fmt.Errorf("restore %s without overwrite failed; original retained at %s: %w", item.file.Display, item.backupPath, err))
 			} else {
 				item.backupPath = ""
 			}
@@ -268,6 +254,34 @@ func rollbackPatch(prepared []preparedPatchFile, createdDirs []string, rename fu
 	}
 	removeEmptyPatchDirs(createdDirs)
 	return errors.Join(errs...)
+}
+
+// 先把路径移动到私有恢复目录再检查，避免 hash 检查与 unlink 间删除并发文件。
+// 即使内容匹配也保留撤回的 inode：外部编辑器可能仍持有可写 FD。失败回滚不
+// 自动销毁这些恢复文件；错误明确返回位置，原文件仅以 no-replace 方式恢复。
+func withdrawInstalledPatch(item preparedPatchFile, restoreNoReplace func(string, string) error) (bool, error) {
+	dir, err := os.MkdirTemp(filepath.Dir(item.file.Abs), ".agentdock-rollback-*")
+	if err != nil {
+		return false, err
+	}
+	saved := filepath.Join(dir, "withdrawn")
+	if err = renameNoReplace(item.file.Abs, saved); err != nil {
+		_ = os.Remove(dir)
+		if errors.Is(err, os.ErrNotExist) {
+			return true, nil
+		}
+		return false, fmt.Errorf("withdraw installed %s: %w", item.file.Display, err)
+	}
+	observed := item
+	observed.file.Abs = saved
+	if inspectInstalledPatchFile(observed) != installedPatchUnchanged {
+		if err = restoreNoReplace(saved, item.file.Abs); err != nil {
+			return false, fmt.Errorf("concurrent edit preserved at %s; target also preserved; original at %s: %w", saved, item.backupPath, err)
+		}
+		_ = os.Remove(dir)
+		return false, fmt.Errorf("concurrent edit preserved at %s; original retained at %s", item.file.Display, item.backupPath)
+	}
+	return true, fmt.Errorf("withdrawn output retained for recovery at %s", saved)
 }
 
 func inspectInstalledPatchFile(item preparedPatchFile) installedPatchState {

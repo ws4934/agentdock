@@ -8,18 +8,11 @@ type UIBinding struct {
 	ResourceURI string
 }
 
+// 中间执行/观察只返回数据；显式展示和文件交付才创建 iframe。
 var toolUIBindings = map[string]UIBinding{
-	"work_result_read":         {ResourceURI: "ui://agentdock/work-result"},
-	"work_result_freeze":       {ResourceURI: "ui://agentdock/work-result"},
-	"diagnostic_export":        {ResourceURI: protocol.ArtifactUIResourceURI},
-	"agentdock_context":        {ResourceURI: protocol.ContextUIResourceURI},
-	"file_edit":                {ResourceURI: protocol.FileChangeUIResourceURI},
-	"task_manage":              {ResourceURI: protocol.TaskProgressUIResourceURI},
-	"acp_session":              {ResourceURI: protocol.ACPStatusUIResourceURI},
-	"workflow_template_manage": {ResourceURI: protocol.WorkflowUIResourceURI},
-	"mcp_tool_call":            {ResourceURI: protocol.DynamicMCPUIResourceURI},
-	"recall_write":             {ResourceURI: protocol.RecallUIResourceURI},
-	"file_publish":             {ResourceURI: protocol.ArtifactUIResourceURI},
+	"work_result_show":  {ResourceURI: "ui://agentdock/work-result"},
+	"diagnostic_export": {ResourceURI: protocol.ArtifactUIResourceURI},
+	"file_publish":      {ResourceURI: protocol.ArtifactUIResourceURI},
 }
 
 func toolUIBinding(name string) *UIBinding {

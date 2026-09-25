@@ -3,12 +3,8 @@ package jobrun
 import (
 	"bytes"
 	"encoding/json"
-	"encoding/xml"
 	"errors"
-	"io"
-	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -133,104 +129,6 @@ func (g *goCollector) result() testObservation {
 			r.Complete = false
 		}
 	}
-	return r
-}
-
-func readJUnit(path string) testObservation {
-	r := testObservation{}
-	if regular(path) != nil {
-		return r
-	}
-	info, err := os.Stat(path)
-	if err != nil || info.Size() > 4<<20 {
-		return r
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return r
-	}
-	defer f.Close()
-	decoder := xml.NewDecoder(io.LimitReader(f, (4<<20)+1))
-	type suite struct{ start, declared int }
-	stack := []suite{}
-	depth := 0
-	caseDepth := 0
-	failure, skipped := false, false
-	suites := 0
-	for {
-		token, err := decoder.Token()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return r
-		}
-		switch value := token.(type) {
-		case xml.Directive:
-			return r
-		case xml.StartElement:
-			depth++
-			if depth > 64 {
-				return r
-			}
-			if value.Name.Local == "testsuite" {
-				count := -1
-				for _, a := range value.Attr {
-					if a.Name.Local == "tests" {
-						count, err = strconv.Atoi(a.Value)
-						if err != nil || count < 0 {
-							return r
-						}
-					}
-				}
-				stack = append(stack, suite{r.Tests, count})
-				suites++
-			}
-			if value.Name.Local == "testcase" {
-				if caseDepth != 0 || len(stack) == 0 {
-					return r
-				}
-				caseDepth = depth
-				failure = false
-				skipped = false
-			}
-			if caseDepth != 0 {
-				if value.Name.Local == "failure" || value.Name.Local == "error" {
-					failure = true
-				}
-				if value.Name.Local == "skipped" {
-					skipped = true
-				}
-			}
-		case xml.EndElement:
-			if value.Name.Local == "testcase" && caseDepth == depth {
-				r.Tests++
-				if r.Tests > 100000 {
-					return r
-				}
-				if failure {
-					r.Failed++
-				} else if skipped {
-					r.Skipped++
-				} else {
-					r.Passed++
-				}
-				caseDepth = 0
-			}
-			if value.Name.Local == "testsuite" {
-				if len(stack) == 0 {
-					return r
-				}
-				s := stack[len(stack)-1]
-				stack = stack[:len(stack)-1]
-				if s.declared >= 0 && s.declared != r.Tests-s.start {
-					return r
-				}
-			}
-			depth--
-		}
-	}
-	r.Complete = suites > 0 && depth == 0 && len(stack) == 0 && caseDepth == 0
 	return r
 }
 

@@ -12,6 +12,7 @@ func serverInstructions(nexusEnabled bool, custom string) string {
 	if nexusEnabled {
 		instructions = nexusServerInstructions
 	}
+	instructions += " 工具的 structuredContent 保存完整结果和错误证据，content 文本仅为有界摘要；动态 MCP 的大 content 只在最外层返回一次。中间检查使用无卡片的 work_result_read，仅显式可视化或最终交付时调用 work_result_show，不要每个检查点都创建卡片。"
 	custom = strings.TrimSpace(custom)
 	if custom == "" {
 		return instructions

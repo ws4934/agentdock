@@ -4,7 +4,7 @@ import "github.com/uvwt/agentdock/internal/tool/contract"
 
 func waitInputSchema(props map[string]any) map[string]any {
 	props["pid"] = contract.BoundedInteger("Exact target application PID.", 1, 2147483647)
-	props["window_id"] = contract.BoundedInteger("Observed window ID, required for absence and element conditions.", 1, 4294967295)
+	props["window_id"] = contract.BoundedInteger64("Observed window ID, required for absence and element conditions.", 1, 4294967295)
 	props["window_title"] = map[string]any{"type": "string", "maxLength": 1024}
 	props["condition"] = enum("Observe only. Absence means not visible, not proof of process exit.", "window_exists", "window_absent", "window_stable", "element_exists", "element_absent", "element_enabled", "element_disabled")
 	props["element"] = contract.InputObject(map[string]any{"role": contract.String("Exact AX role."), "title": map[string]any{"type": "string", "maxLength": 1024}, "description": map[string]any{"type": "string", "maxLength": 1024}})

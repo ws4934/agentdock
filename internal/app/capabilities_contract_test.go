@@ -92,10 +92,30 @@ func TestRuntimeSuccessOutputsValidateNewCapabilities(t *testing.T) {
 	call("task_manage", map[string]any{"action": "complete", "task_id": taskID})
 	request := map[string]any{"task_id": taskID, "workdir": root, "source_paths": []string{"capability-source.txt"}, "job_ids": []string{id}}
 	live := call("work_result_read", request)["work_result"].(workresult.Projection)
+	call("work_result_show", request)
 	request["request_id"] = "freeze-schema"
 	request["expected_source_revision"] = live.Source.Revision
 	frozen := call("work_result_freeze", request)
 	call("work_result_read", map[string]any{"result_id": frozen["result_id"]})
+	// 模拟丢失终态的测试回执；真实进程身份已由本次 fixture 执行记录。
+	record.Status = "running"
+	record.FinishedAt = nil
+	record.CreatedAt = time.Now().Add(-time.Hour)
+	payload, marshalErr := json.Marshal(record)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	jobs, jobsErr := r.command.Jobs()
+	if jobsErr != nil {
+		t.Fatal(jobsErr)
+	}
+	if err := os.WriteFile(filepath.Join(jobs.Root, id, "record.json"), payload, 0600); err != nil {
+		t.Fatal(err)
+	}
+	abandoned := call("job_control", map[string]any{"action": "abandon", "job_id": id})
+	if abandoned["status"] != "abandoned" {
+		t.Fatalf("unexpected abandonment: %#v", abandoned)
+	}
 	call("job_control", map[string]any{"action": "archive", "job_id": id})
 	call("runtime_diagnostics", map[string]any{})
 	exported := call("diagnostic_export", map[string]any{})

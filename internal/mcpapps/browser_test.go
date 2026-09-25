@@ -86,6 +86,17 @@ var fixtures = map[string]any{
 	"acp_status":        map[string]any{"action": "get", "session": map[string]any{"id": "test-session", "agent": "Coding Agent", "status": "ready"}, "messages": []any{map[string]any{"role": "assistant", "content": "已完成修改"}}},
 }
 
+// 必须先让 Chrome 正常关闭并排空自身资源，再取消 allocator/清理用户目录。
+// 仅 context cancel 会强制结束浏览器，配置写入子进程可能与 TempDir 清理竞争。
+func closeIsolatedBrowser(t *testing.T, browser context.Context) {
+	t.Helper()
+	shutdown, cancel := context.WithTimeout(browser, 10*time.Second)
+	defer cancel()
+	if err := chromedp.Cancel(shutdown); err != nil {
+		t.Errorf("graceful isolated Chrome shutdown: %v", err)
+	}
+}
+
 func TestFeedbackBrowser(t *testing.T) {
 	binary := os.Getenv("AGENTDOCK_UI_CHROME")
 	if binary == "" && runtime.GOOS == "darwin" {
@@ -109,6 +120,7 @@ func TestFeedbackBrowser(t *testing.T) {
 	defer stopBrowser()
 	ctx, cancel := context.WithTimeout(browser, 150*time.Second)
 	defer cancel()
+	defer closeIsolatedBrowser(t, browser)
 	j := func(v any) string {
 		b, err := json.Marshal(v)
 		if err != nil {
@@ -271,11 +283,11 @@ func TestFeedbackBrowser(t *testing.T) {
 	check(doc + `.querySelector('.primary').disabled`)
 	// 销毁后停止渲染且不得发业务调用；重连仅恢复桥接。
 	eval(`frame.contentWindow.postMessage({jsonrpc:'2.0',id:800,method:'ui/resource-teardown',params:{}},'*')`)
-	run(chromedp.Poll(doc+`.getElementById('content').childElementCount===0`, nil))
+	run(chromedp.Poll(doc+`.URL==='about:blank'`, nil))
 	eval(`result({filename:'After teardown'})`)
 	run(chromedp.Sleep(100 * time.Millisecond))
-	check(doc + `.getElementById('content').childElementCount===0`)
-	check(`frame.contentWindow.__audit.listeners===0 && frame.contentWindow.__audit.observers===0 && frame.contentWindow.__audit.timers.size===0 && frame.contentWindow.__audit.frames.size===0`)
+	check(doc + `.body.childElementCount===0`)
+	check(`messages.some(m=>m.id===800 && m.result && !m.error) && frame.contentWindow.__audit===undefined`)
 	check(`!messages.some(m=>m.method==='tools/call'||m.method==='ui/message')`)
 
 	// Work results refresh only on explicit user input, use the read tool, and
@@ -316,6 +328,6 @@ func TestFeedbackBrowser(t *testing.T) {
 	run(chromedp.Sleep(800 * time.Millisecond))
 	check(`batch.every((f,i)=>{const h=f.contentWindow,u=h.document.querySelector('iframe').contentWindow;return h.messages.length===batchCounts[i] && u.__audit.listeners===1 && u.__audit.observers===1 && u.__audit.timers.size===0 && u.__audit.frames.size===0})`)
 	eval(`for(const f of batch){f.contentWindow.teardown()}`)
-	run(chromedp.Poll(`batch.every(f=>f.contentDocument.querySelector('iframe').contentDocument.getElementById('content').childElementCount===0)`, nil))
-	check(`batch.every(f=>{const u=f.contentDocument.querySelector('iframe').contentWindow;return u.__audit.listeners===0&&u.__audit.observers===0&&u.__audit.timers.size===0&&u.__audit.frames.size===0})`)
+	run(chromedp.Poll(`batch.every(f=>f.contentDocument.querySelector('iframe').contentDocument.URL==='about:blank')`, nil))
+	check(`batch.every(f=>{const u=f.contentDocument.querySelector('iframe').contentWindow;return u.__audit===undefined && f.contentWindow.messages.some(m=>m.id===801 && m.result && !m.error)})`)
 }

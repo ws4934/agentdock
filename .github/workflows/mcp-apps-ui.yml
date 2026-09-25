@@ -3,9 +3,9 @@ name: MCP Apps UI
 on:
   push:
     branches: [main]
-    paths: ['internal/mcpapps/**', 'internal/mcp/**', '.github/workflows/mcp-apps-ui.yml']
+    paths: ['internal/mcpapps/**', 'internal/mcp/**', 'internal/app/mcp_apps.go', 'internal/app/specs_work.go', 'internal/workresult/**', '.github/workflows/mcp-apps-ui.yml']
   pull_request:
-    paths: ['internal/mcpapps/**', 'internal/mcp/**', '.github/workflows/mcp-apps-ui.yml']
+    paths: ['internal/mcpapps/**', 'internal/mcp/**', 'internal/app/mcp_apps.go', 'internal/app/specs_work.go', 'internal/workresult/**', '.github/workflows/mcp-apps-ui.yml']
 
 permissions:
   contents: read
@@ -36,6 +36,6 @@ jobs:
           npm exec prettier -- --check src test build.mjs package.json tsconfig.json
           npm run check:generated
       - name: MCP resource and binding contracts
-        run: go test ./internal/mcpapps ./internal/mcp -count=1 -timeout=3m
+        run: go test ./internal/mcpapps ./internal/mcp ./internal/app -count=1 -timeout=3m
       - name: Real isolated browser lifecycle and performance
         run: go test -tags mcpapps_browser ./internal/mcpapps -run TestFeedbackBrowser -count=1 -timeout=3m -v

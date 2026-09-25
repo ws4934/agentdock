@@ -42,6 +42,8 @@ type Request struct {
 	Label      string `json:"label,omitempty"`
 }
 type Record struct {
+	GitDir      string    `json:"git_dir,omitempty"`
+	CommonDir   string    `json:"git_common_dir,omitempty"`
 	ID          string    `json:"worktree_id"`
 	Project     string    `json:"project"`
 	Path        string    `json:"path"`
@@ -189,6 +191,17 @@ func (s *Service) Create(ctx context.Context, r Request) (Record, error) {
 		return record, err
 	}
 	record.Status = "ready"
+	identity, identityErr := readGitIdentity(ctx, record.Path)
+	if identityErr == nil {
+		record.GitDir, record.CommonDir = identity.directory, identity.common
+		identityErr = verifyGitIdentity(ctx, record)
+	}
+	if identityErr != nil {
+		record.Status = "unavailable"
+		record.Failure = "worktree_git_identity_unproven"
+		_ = s.save(record)
+		return record, identityErr
+	}
 	if err = s.save(record); err != nil {
 		return record, err
 	}
@@ -241,6 +254,11 @@ func (s *Service) Status(ctx context.Context, id string) (Record, error) {
 	if !registeredWorktree(data, record.Path) {
 		record.Status = "unavailable"
 		record.Failure = "worktree_registration_missing"
+		return record, nil
+	}
+	if err := verifyGitIdentity(ctx, record); err != nil {
+		record.Status = "unavailable"
+		record.Failure = "worktree_git_identity_changed"
 		return record, nil
 	}
 	head, err := sourceproof.Git(ctx, path, "rev-parse", "--verify", "HEAD")

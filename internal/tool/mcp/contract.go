@@ -90,7 +90,7 @@ func OutputSchema(name string) (map[string]any, bool) {
 		props["annotations"] = objectProp("Optional upstream MCP tool annotations.")
 	case ToolCall:
 		props["name"] = stringProp("Qualified MCP tool name.")
-		props["result"] = objectProp("Raw upstream MCP tools/call result, including content and structuredContent when supplied.")
+		props["result"] = objectProp("Upstream tools/call metadata and structuredContent. On the MCP wire, large content appears once in the outer content field; result.content_location=mcp.content identifies this projection.")
 	default:
 		return nil, false
 	}

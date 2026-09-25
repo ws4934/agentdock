@@ -1,87 +1,83 @@
 # MCP Apps 反馈组件 v2
 
-## 实现范围
+## 展示与执行分离
 
-AgentDock 0.8.4 使用仓库内的 `internal/mcpapps` 提供反馈资源，不再把 UI 修改写进 Go 模块缓存，也不需要修改其他项目的共享协议包。MCP 业务数据格式保持原样。
+`internal/mcpapps` 提供九种独立、内容寻址的反馈资源：能力概览、任务进度、文件变更、外部 MCP、文件下载、记忆、工作流、编程会话和工作结果。保留资源不等于每次调用都挂载它。
 
-八个视图分别构建：能力概览（包括设备列表）、任务进度、文件变更、外部 MCP 结果、文件下载、记忆结果、工作流、编程会话。基础通信使用官方 `@modelcontextprotocol/ext-apps` 2.0.0；展示使用 Preact 10.29.8 与 TypeScript，构建依赖由 `package-lock.json` 固定。
+自动 UI 绑定仅保留 `work_result_show`、`file_publish` 和 `diagnostic_export`。`task_manage`、`file_edit`、`agentdock_context`、`mcp_tool_call`、`acp_session`、工作流/记忆操作以及 `work_result_read`、`work_result_freeze` 都只返回数据。描述符和调用结果使用同一份绑定表，不允许只删结果元数据、却仍由旧描述符触发卡片。
 
-```
+中间检查用 `work_result_read`；显式可视化或最终交付用 `work_result_show`。展示工具与读取工具共享选择校验、任务/源码范围和权限逻辑，不重复执行命令。卡片内刷新仍只调用 `work_result_read`，不会重新挂载另一张卡片。不要每个检查点都调用 show。
+
+## 源码与构建
+
+```text
 internal/mcpapps/
   apps.go                  Go embed 与资源查找
-  apps_test.go             不可变资源/摘要/预算校验
-  browser_test.go           隔离 Chrome 行为与性能测试（显式 build tag）
-  assets/                  提交到 Git 的八份 HTML 与 manifest
+  apps_test.go             资源、摘要与包体预算校验
+  browser_test.go          隔离 Chrome 行为与渲染性能
+  memory_test.go           多实例、保留 iframe 与循环回收的堆内存检查
+  assets/                 九份生成 HTML 与 manifest
   web/
-    src/bridge.ts          SDK 生命周期、主题、尺寸及销毁
-    src/store.ts           展示状态、去重与语言切换
-    src/model.ts           有界的字段投影
-    src/preview.ts         第三方 JSON 预览上限
-    src/ui.tsx             共享卡片、详情与列表
-    src/views/             八种独立数据适配器
-    src/style.css          宿主语义颜色与响应式样式
-    test/                  状态/投影/安全边界测试
-    build.mjs              独立入口、内联资源、内容哈希
+    src/bridge.ts         官方 SDK、主题、尺寸、连接及资源销毁
+    src/store.ts          有界展示模型、去重、语言切换及清理
+    src/views/            独立视图适配器
+    src/ui.tsx            共享布局与交互
+    src/preview.ts        有界第三方 JSON 预览
+    src/style.css         宿主语义颜色及响应式布局
+    test/                 状态与投影行为测试
+    build.mjs             单视图内联构建与内容哈希
 ```
 
-每个 HTML 包含自己需要的视图及 SDK，不加载 CDN、远程字体、额外脚本、路由或 Node 运行服务。源码共享组件不等于每张卡片加载全部业务视图。
+依赖由 package-lock 固定：官方 MCP Apps SDK、Preact、TypeScript。没有 CDN、远程字体、额外路由或运行时 Node 服务。SDK 仍占独立卡片的大部分体积；源码共享不意味着不同 iframe 共享运行时对象。
 
-## 生命周期与错误边界
+每份 HTML 上限 512 KiB，URI 为 `ui://agentdock/<view>/v2-<内容哈希>.html`。内容变化生成新 URI；进程内缓存构建产物，不在每次调用时重写模板。标准 MCP 与 Nexus bridge 使用同一资源及描述符，保留原始资源读取能力，不声称已完成真实 Nexus 部署联调。
 
-- 连接中、等待结果、成功、空结果、错误、取消、连接超时均有可见表示。初始化有 8 秒期限。
-- 使用 SDK 注册通知和验证协议消息。只接受父窗口来源；无效结果不会被解释为“零项能力”。
-- 工具错误/取消会清除旧成功内容。纯文本结果或可解析的有界 JSON 文本提供降级展示，不再一直等待。
-- `重新连接反馈` 只重新握手；不调用写文件、命令或任何业务工具。宿主未重新发送结果时保持明确的等待说明，用户仍能查看工具文本。
-- 业务状态与展开、设备选择、焦点分开。相同实体的结果更新不重建整张卡片；同一结果重复到达不产生 DOM 提交。
-- 详情首次展开才创建；列表先显示 12 项，按需增加；长文本/差异预览有上限。
-- 保存两个语言的有界视图模型，不保存原始日志/附件响应。第三方结构化内容采用深度、节点、字符串和输出长度受限的预览。
-- 静态卡片不轮询、不持续播放动画。尺寸观察只绑定内容根节点；变化按动画帧合并且同高不重复发送。销毁/重连明确回收监听器、观察器、定时任务和连接。
+## 生命周期
 
-SDK 无法强制宿主创建 iframe。宿主完全不挂载时，工具已有的文本与结构化输出继续可用；不能把“工具成功”当作“UI 已显示”。也不假设不同工具调用会复用一张卡片。
+初始化有 8 秒时限；连接、等待、成功、空、错误、取消和超时均有明确状态。协议使用官方 SDK；只接受父窗口消息，错误不能保留旧成功状态。重连只恢复反馈连接，不重复业务工具。
 
-## Go 服务与缓存
+模型只保留两个语言的有界投影，不保存巨型原始日志或附件。列表和详情按需展开；相同结果不触发 DOM 提交。尺寸通知按动画帧合并，静态卡片不轮询。dispose 清除模型、当前快照、比较键、订阅者、观察器和连接，销毁后不再接受订阅或晚到结果。测试宿主在清理临时用户目录前会优雅关闭 Chrome 并等待资源退出，避免强制取消与浏览器配置写入竞争。
 
-构建结果的 URI 为 `ui://agentdock/<view>/v2-<内容哈希>.html`，同内容稳定、内容变更时换 URI。HTML 在进程启动时加载一次，不在每次资源读取时重新替换整份模板。
+收到 `ui/resource-teardown` 后，先完成协议回复，再清理组件并导航到固定 `about:blank`。这样宿主即使继续保留 iframe 元素，也不必保留整套 SDK 的执行环境；该导航不访问网络。pagehide 仅清理，不再次导航。若宿主禁止导航，组件清理仍完成；服务端减少高频 UI 绑定依然是主防线。
 
-工具发现、标准调用结果及 `Server.Invoke` 桥接结果使用同一个 URI，错误结果也保留绑定。工作流从仅 `match` 结果绑定改成工具级发现，对其他操作也提供结果视图。命令、会话轮询、普通读取等高频工具仍然不额外绑定卡片。
+不能用“监听器归零”代替“整个执行环境已释放”。宿主不发送 teardown、仍保留活动卡片时，单个实例的 SDK 成本仍存在。组件无法强制宿主创建或销毁 iframe，也不能控制 ChatGPT 自身的历史记录、缓存和扩展内存。
 
-桥接资源的 renderer contract 延续共享数据协议，资源地址由本地 manifest 决定，不再用旧的固定 URI 推断新资源类型。测试覆盖 AgentDock 的能力声明、资源读取、调用 envelope 和独立功能开关。未对一个真实部署的 NexusDock 服务器做端到端升级验证。
+## 响应体积与结果完整性
 
-升级后需要刷新客户端的 AgentDock 工具定义并使用新会话。仍然缓存旧 URI 的客户端需要刷新，不依靠重新启动 Core 来刷新平台缓存。
+普通工具完整结果放在 `structuredContent`，包含原始源码/日志、完整错误、分页游标和读取版本；`content` 文本只提供最多 1024 字节的有界摘要。不能把摘要当作文件全文，也不能把进程未知或部分成功概括为成功。
+
+动态 MCP 的原始文本、图像、音频和资源在外层 `content` 返回一次，结构化 result 使用 `content_location=mcp.content` 指明位置。转换不修改上游对象，其他结构化内容和扩展元数据保留。显式读取旧动态视图资源时，归一化临时引用外层 content，不复制或长期保留它。
+
+SDK CallToolResult 的内容联合类型单独解码，不再将完整 structuredContent 额外序列化并解析一遍。消费方必须支持结构化结果；仅消费文本的旧集成需要适配这一线协议投影，而不是期待重复的 pretty JSON。
 
 ## 安全与外观
 
-CSP 保持禁止外部连接和资源，仅允许构建时内联脚本/样式。不加入 `unsafe-eval`。SDK 使用其默认无 JIT 解析配置；第三方内容只作为文本进入组件，不能成为 HTML、脚本或 CSS。链接只允许无内嵌凭据的 HTTP(S)，过期下载链接不能重新触发打开。
+保留现有主题、响应式布局、焦点、展开及设备选择行为。CSP 禁止外部连接、字体与脚本，不启用 unsafe-eval。不可信内容只按文本渲染；链接仅允许无嵌入凭据的 HTTP(S)，过期下载链接不能继续打开。第三方许可证仍嵌入产物。
 
-字体以 14px 主标题和 12–13px 次要内容为主，窄屏换行而不缩到 9px。使用宿主主题变量，避免重复品牌和开发者术语；未启用模块不挤占默认摘要。详情与主要状态保留可读、可聚焦的操作入口。
+## 验证
 
-第三方依赖许可证保留在 `web/THIRD_PARTY_NOTICES.txt` 并嵌入每个 HTML；相同许可证去重保留所有对应包名。
-
-## 验证命令
+本机长验证按约定放入 tmux 会话，保存日志和退出码。会话内执行：
 
 ```sh
 cd internal/mcpapps/web
-npm ci --no-audit --no-fund
 npm run check
 npm test
 npm run build
 npm run check:generated
 cd ../../..
-go test ./internal/mcp ./internal/mcpapps
-go test -tags mcpapps_browser ./internal/mcpapps -run TestFeedbackBrowser -v -count=1 -timeout=3m
+go test -race ./internal/app ./internal/mcp ./internal/mcpapps -count=1
+go test -tags mcpapps_browser ./internal/mcpapps -run '^TestFeedbackBrowser' -count=1 -timeout=4m -v
 ```
 
-非 macOS 或未按标准位置安装 Chrome 时，设置 `AGENTDOCK_UI_CHROME`。浏览器测试使用独立临时用户目录和本机 httptest 宿主，不读取用户的浏览器标签，不执行真实桌面输入或业务工具。`AGENTDOCK_UI_SCREENSHOTS` 可指定合成页面截图输出目录。
+Chrome 测试使用独立临时用户目录和本机合成宿主，不接管用户标签页、读取凭据或执行真实 MCP 业务操作。非标准 Chrome 路径用 `AGENTDOCK_UI_CHROME` 指定。
 
-CI 检查类型、13 项状态/投影用例、格式、生成一致性、Go 协议边界及真实浏览器行为，不再靠匹配 CSS/JavaScript 字符串来证明 UI 正常。
+回归同时检查九种资源、异常握手、10 次重连、1000 次重复通知、显式只读刷新、主题/窄屏/焦点、注入防护、teardown 回复先于空白导航，以及 100 次真实 MCP 数据调用不附带 UI 元数据。内存测试在强制 GC 后比较 1/10/30/60/100 个实例、保留 iframe 的销毁和多轮移除；销毁后存活堆必须低于活动时的 25%，循环移除不能留下持续累积的执行环境。
 
-最终浏览器回归在本机 macOS/arm64 上覆盖八个视图、握手失败/超时、错误/取消/空/纯文本、10 次重连、1,000 次相同结果、设备选择、展开和焦点、240px/2 倍缩放、非父窗口通知、恶意文本和 URL、到期链接及销毁。最后一轮 40 个任务更新样本的 DOM 提交 P95 为 1.3ms；同页八类卡片并行冷挂载约 952ms，闲置后不再发送消息，全部销毁后监听器、观察器、计时器和动画帧计数归零。这些是本机合成宿主的计算与本地加载时间，不是公网时延或真实 ChatGPT 的挂载耗时。
+2026-09-24 本机隔离实测：100 张活动工作结果卡片为 691.262 MiB JS 已用堆；销毁但保留 iframe 后 18.281 MiB；移除 iframe 后 0.576 MiB，三轮创建/移除后 0.595 MiB。该数字不是真实 ChatGPT 页面的总内存或公网表现。活动实例本身没有变成零成本，主要改进是按需创建和真正回收。
 
-包体权衡必须明确：原始共享模板约 63KB；采用完整官方 SDK 后，每视图 HTML 约 0.5MB（含第三方许可证），构建上限 512KiB。压缩体积仅是构建指标，不代表 MCP 链路一定启用压缩。此实现优化了无效渲染、闲置活动、状态可靠性和可维护性，没有宣称比旧手写模板更小。
-
-完整 Go、race、vet 和 macOS App/DMG/ZIP 验证的最终结果保留在 Git 忽略的 `dist/validation/mcp-ui-v2/`。真实 ChatGPT 中未热替换当前服务；安装新包并刷新工具定义之后仍需宿主联调。
+升级后刷新 AgentDock 工具定义并新开会话。历史响应和旧资源缓存不会被源码修改自动改写；安装前当前运行版不会改变。
 
 ## 官方参考
 
-- MCP Apps App API：https://apps.extensions.modelcontextprotocol.io/api/classes/app.App.html
-- OpenAI 组件资源与缓存：https://developers.openai.com/plugins/build/chatgpt-ui
+- https://developers.openai.com/plugins/build/chatgpt-ui （Separate data processing from UI rendering）
+- https://apps.extensions.modelcontextprotocol.io/api/classes/app.App.html

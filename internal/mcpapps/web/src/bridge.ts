@@ -126,7 +126,18 @@ export function start(view: string, normalize: Normalizer): void {
       }
     };
     next.onteardown = async () => {
-      if (current()) setTimeout(dispose, 0);
+      if (current())
+        setTimeout(() => {
+          if (!current()) return;
+          dispose();
+          // 协议回复先完成；宿主即使保留 iframe，也释放整套 SDK 执行环境。
+          // 固定空白文档不访问网络；pagehide 只清理，不再次导航。
+          try {
+            window.location.replace("about:blank");
+          } catch {
+            /* 受限宿主仍已完成组件清理。 */
+          }
+        }, 0);
       return {};
     };
     try {

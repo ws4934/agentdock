@@ -49,6 +49,11 @@ func Boolean(description string) map[string]any {
 	return map[string]any{"type": "boolean", "description": description}
 }
 
+// 线协议范围不能依赖宿主 int 的位数，例如 CGWindowID 是完整 uint32。
+func BoundedInteger64(description string, minimum, maximum int64) map[string]any {
+	return map[string]any{"type": "integer", "description": description, "minimum": minimum, "maximum": maximum}
+}
+
 func StringArray(description string) map[string]any {
 	return map[string]any{
 		"type":        "array",

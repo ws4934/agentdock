@@ -105,8 +105,8 @@ func TestMCPAppsResourceContractMatrix(t *testing.T) {
 					}
 				}
 			}
-			if len(bound) != tt.count {
-				t.Fatalf("bound tools %d want %d", len(bound), tt.count)
+			if len(bound) != 2 {
+				t.Fatalf("bound resource types %d want 2 explicit presentation resources", len(bound))
 			}
 			for _, uri := range []string{"ui://agentdock/not-found", "ui://agentdock/context/v2-forged.html", "file:///etc/passwd"} {
 				if _, err := h.server.ReadAppResource(uri); err == nil {
@@ -117,7 +117,7 @@ func TestMCPAppsResourceContractMatrix(t *testing.T) {
 	}
 }
 
-func TestMCPAppsInvokePreservesErrorUIAndTextFallback(t *testing.T) {
+func TestMCPAppsInvokeKeepsDataToolsHeadless(t *testing.T) {
 	root := t.TempDir()
 	h := newMCPAppTestHarness(t, config.Config{AgentDockHome: filepath.Join(root, "home"), AgentDockDefaultDir: root})
 	for _, tc := range []struct {
@@ -134,9 +134,8 @@ func TestMCPAppsInvokePreservesErrorUIAndTextFallback(t *testing.T) {
 		if result["isError"] != tc.wantError || result["structuredContent"] == nil || result["content"] == nil {
 			t.Fatalf("envelope lost data %#v", result)
 		}
-		meta, ok := result["_meta"].(mcpsdk.Meta)
-		if !ok || meta["ui"] == nil {
-			t.Fatal("bridge call lost UI binding")
+		if result["_meta"] != nil {
+			t.Fatal("data-only call unexpectedly attached UI")
 		}
 	}
 }

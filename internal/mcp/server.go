@@ -170,7 +170,9 @@ func (s *Server) callTool(ctx context.Context, name string, request *mcpsdk.Call
 	}
 	slog.Info("tool finished", finishedAttrs...)
 
-	encoded, encodeErr := json.Marshal(toolEnvelope(name, result, err))
+	envelope := toolEnvelope(name, result, err)
+	// SDK 只解码多态 content；不要再序列化/解析一整份源码或日志结构化结果。
+	encoded, encodeErr := json.Marshal(map[string]any{"content": envelope["content"]})
 	if encodeErr != nil {
 		return nil, fmt.Errorf("encode MCP tool result: %w", encodeErr)
 	}
@@ -178,6 +180,8 @@ func (s *Server) callTool(ctx context.Context, name string, request *mcpsdk.Call
 	if decodeErr := json.Unmarshal(encoded, &response); decodeErr != nil {
 		return nil, fmt.Errorf("decode MCP tool result: %w", decodeErr)
 	}
+	response.StructuredContent = envelope["structuredContent"]
+	response.IsError, _ = envelope["isError"].(bool)
 	if def, ok := s.runtime.ToolDefinition(name); ok {
 		if meta := toolResultMetadata(def, arguments, s.cfg.MCPAppsEnabled); len(meta) > 0 {
 			response.Meta = meta
@@ -294,7 +298,7 @@ func toolEnvelope(name string, structured any, err error) map[string]any {
 				}
 			}
 		}
-		return map[string]any{"isError": true, "structuredContent": payload, "content": []map[string]any{{"type": "text", "text": pretty(payload)}}}
+		return map[string]any{"isError": true, "structuredContent": payload, "content": []map[string]any{{"type": "text", "text": resultSummary(name, payload)}}}
 	}
 	if name == "view_image" || name == "desktop_snapshot" || name == "desktop_act" || name == "desktop_sequence" {
 		payload := asMap(structured)
@@ -302,7 +306,7 @@ func toolEnvelope(name string, structured any, err error) map[string]any {
 			mimeType, _ := payload["_mcp_image_mime_type"].(string)
 			clean := cloneWithoutInternalImage(payload)
 			if name != "view_image" {
-				return map[string]any{"isError": false, "structuredContent": clean, "content": []map[string]any{{"type": "text", "text": pretty(clean)}, {"type": "image", "data": data, "mimeType": mimeType}}}
+				return map[string]any{"isError": false, "structuredContent": clean, "content": []map[string]any{{"type": "text", "text": resultSummary(name, clean)}, {"type": "image", "data": data, "mimeType": mimeType}}}
 			}
 			return map[string]any{"isError": false, "structuredContent": clean, "content": []map[string]any{{"type": "image", "data": data, "mimeType": mimeType}}}
 		}
@@ -310,28 +314,38 @@ func toolEnvelope(name string, structured any, err error) map[string]any {
 	if name == "file_publish" || name == "diagnostic_export" {
 		payload := asMap(structured)
 		if uri, ok := payload["resource_uri"].(string); ok && uri != "" {
-			return map[string]any{"isError": false, "structuredContent": structured, "content": []map[string]any{{"type": "text", "text": pretty(structured)}, {"type": "resource_link", "uri": uri, "name": payload["filename"], "mimeType": payload["mime_type"], "description": "Immutable artifact. Read through the authenticated MCP resource reader, not repeated tool calls."}}}
+			return map[string]any{"isError": false, "structuredContent": structured, "content": []map[string]any{{"type": "text", "text": resultSummary(name, structured)}, {"type": "resource_link", "uri": uri, "name": payload["filename"], "mimeType": payload["mime_type"], "description": "Immutable artifact. Read through the authenticated MCP resource reader, not repeated tool calls."}}}
 		}
 	}
 	if name == "mcp_tool_call" {
 		return dynamicMCPToolEnvelope(structured)
 	}
-	return map[string]any{"isError": false, "structuredContent": structured, "content": []map[string]any{{"type": "text", "text": pretty(structured)}}}
+	return map[string]any{"isError": false, "structuredContent": structured, "content": []map[string]any{{"type": "text", "text": resultSummary(name, structured)}}}
 }
 
 func dynamicMCPToolEnvelope(structured any) map[string]any {
-	payload := asMap(structured)
-	remote, _ := payload["result"].(map[string]any)
+	original := asMap(structured)
+	payload := make(map[string]any, len(original))
+	for k, v := range original {
+		payload[k] = v
+	}
+	remote := asMap(original["result"])
+	projected := make(map[string]any, len(remote))
+	for k, v := range remote {
+		if k != "content" {
+			projected[k] = v
+		}
+	}
 	isError, _ := remote["isError"].(bool)
 	content, ok := remote["content"]
-	if !ok {
-		content = []map[string]any{{"type": "text", "text": pretty(payload)}}
+	if !ok || content == nil {
+		content = []map[string]any{{"type": "text", "text": resultSummary("mcp_tool_call", original)}}
+	} else {
+		// 大正文、图片、音频和嵌入资源只放在标准 content 一次；不修改上游原始结果。
+		projected["content_location"] = "mcp.content"
 	}
-	return map[string]any{
-		"isError":           isError,
-		"structuredContent": payload,
-		"content":           content,
-	}
+	payload["result"] = projected
+	return map[string]any{"isError": isError, "structuredContent": payload, "content": content}
 }
 
 func cloneWithoutInternalImage(value map[string]any) map[string]any {
@@ -354,12 +368,4 @@ func asMap(value any) map[string]any {
 	default:
 		return map[string]any{}
 	}
-}
-
-func pretty(value any) string {
-	data, err := json.MarshalIndent(value, "", "  ")
-	if err != nil {
-		return fmt.Sprint(value)
-	}
-	return string(data)
 }

@@ -101,8 +101,10 @@ func (s *Service) ControlJob(ctx context.Context, r JobControlRequest) (Result, 
 		record, err = jobs.Cancel(r.JobID)
 	case "archive":
 		record, err = jobs.Archive(ctx, r.JobID)
+	case "abandon":
+		record, err = jobs.Abandon(ctx, r.JobID)
 	default:
-		return nil, toolError("INVALID_ARGUMENT", "action must be cancel or archive", "validation")
+		return nil, toolError("INVALID_ARGUMENT", "action must be cancel, archive or abandon", "validation")
 	}
 	if err != nil {
 		return nil, err

@@ -96,7 +96,7 @@ func Supervise(ctx context.Context, root, id string) error {
 		}
 		return writeJSON(filepath.Join(dir, "record.json"), record)
 	}
-	if time.Since(record.CreatedAt) > 10*time.Second {
+	if time.Since(record.CreatedAt) > 10*time.Second || (record.BootID != "" && bootID() != "" && record.BootID != bootID()) {
 		return finish("launch_expired", "supervisor missed launch deadline; no command was run")
 	}
 	var spec Spec
@@ -192,7 +192,13 @@ func Supervise(ctx context.Context, root, id string) error {
 		err  error
 	}
 	done := make(chan outcome, 1)
-	go func() { code, err := session.RunOwned(execution, command, out, stderr); done <- outcome{code, err} }()
+	go func() {
+		code, err := session.RunOwnedTracked(execution, command, out, stderr, executionGroup(id), func(pid int) error {
+			identity := ExecutionIdentity{JobID: id, BootID: record.BootID, PID: pid, Group: executionGroup(id)}
+			return writeJSON(filepath.Join(dir, "execution.json"), identity)
+		})
+		done <- outcome{code, err}
+	}()
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	persistFailed := false
@@ -217,6 +223,10 @@ running:
 	record.Stderr, errErr = stderr.snapshot()
 	persistFailed = persistFailed || outErr != nil || errErr != nil
 	record.ExitCode = &result.code
+	var identity ExecutionIdentity
+	if readJSON(filepath.Join(dir, "execution.json"), &identity) == nil && validExecution(record, identity) {
+		record.Execution = &identity
+	}
 	if spec.Validation != nil {
 		observation := testObservation{}
 		switch spec.Validation.Adapter {

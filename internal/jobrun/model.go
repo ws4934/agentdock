@@ -42,27 +42,31 @@ type Evidence struct {
 	SourceAfter    sourceproof.Snapshot `json:"source_after"`
 }
 type Record struct {
-	SchemaVersion         int        `json:"schema_version"`
-	ID                    string     `json:"job_id"`
-	DefinitionHash        string     `json:"definition_hash"`
-	Title                 string     `json:"title,omitempty"`
-	Workdir               string     `json:"workdir"`
-	TaskID                string     `json:"task_id,omitempty"`
-	Kind                  string     `json:"kind"`
-	Status                string     `json:"status"`
-	CreatedAt             time.Time  `json:"created_at"`
-	StartedAt             *time.Time `json:"started_at,omitempty"`
-	FinishedAt            *time.Time `json:"finished_at,omitempty"`
-	TimeoutMS             int64      `json:"timeout_ms"`
-	ExitCode              *int       `json:"exit_code,omitempty"`
-	Failure               string     `json:"failure,omitempty"`
-	Stdout                LogState   `json:"stdout"`
-	Stderr                LogState   `json:"stderr"`
-	Evidence              *Evidence  `json:"evidence,omitempty"`
-	Archived              bool       `json:"archived,omitempty"`
-	OwnerAlive            bool       `json:"owner_alive"`
-	CancellationRequested bool       `json:"cancellation_requested,omitempty"`
-	ObservationOnly       bool       `json:"observation_only"`
+	BootID                string             `json:"boot_id,omitempty"`
+	Execution             *ExecutionIdentity `json:"execution,omitempty"`
+	StateUnavailable      bool               `json:"state_unavailable,omitempty"`
+	ResolutionBasis       string             `json:"resolution_basis,omitempty"`
+	SchemaVersion         int                `json:"schema_version"`
+	ID                    string             `json:"job_id"`
+	DefinitionHash        string             `json:"definition_hash"`
+	Title                 string             `json:"title,omitempty"`
+	Workdir               string             `json:"workdir"`
+	TaskID                string             `json:"task_id,omitempty"`
+	Kind                  string             `json:"kind"`
+	Status                string             `json:"status"`
+	CreatedAt             time.Time          `json:"created_at"`
+	StartedAt             *time.Time         `json:"started_at,omitempty"`
+	FinishedAt            *time.Time         `json:"finished_at,omitempty"`
+	TimeoutMS             int64              `json:"timeout_ms"`
+	ExitCode              *int               `json:"exit_code,omitempty"`
+	Failure               string             `json:"failure,omitempty"`
+	Stdout                LogState           `json:"stdout"`
+	Stderr                LogState           `json:"stderr"`
+	Evidence              *Evidence          `json:"evidence,omitempty"`
+	Archived              bool               `json:"archived,omitempty"`
+	OwnerAlive            bool               `json:"owner_alive"`
+	CancellationRequested bool               `json:"cancellation_requested,omitempty"`
+	ObservationOnly       bool               `json:"observation_only"`
 }
 
 func (r Record) Terminal() bool { return r.FinishedAt != nil && r.Status != "outcome_unknown" }

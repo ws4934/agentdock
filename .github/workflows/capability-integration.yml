@@ -3,9 +3,9 @@ name: Capability integration
 on:
   push:
     branches: [main]
-    paths: ['internal/semantic/**', 'internal/sourceproof/**', 'internal/jobrun/**', 'go.mod', 'go.sum', '.github/workflows/capability-integration.yml']
+    paths: ['internal/semantic/**', 'internal/sourceproof/**', 'internal/jobrun/**', 'internal/process/**', 'internal/worktree/**', 'internal/tool/command/**', 'internal/tool/file/**', 'internal/tool/contract/**', 'internal/tool/desktop/**', 'go.mod', 'go.sum', '.github/workflows/capability-integration.yml']
   pull_request:
-    paths: ['internal/semantic/**', 'internal/sourceproof/**', 'internal/jobrun/**', 'go.mod', 'go.sum', '.github/workflows/capability-integration.yml']
+    paths: ['internal/semantic/**', 'internal/sourceproof/**', 'internal/jobrun/**', 'internal/process/**', 'internal/worktree/**', 'internal/tool/command/**', 'internal/tool/file/**', 'internal/tool/contract/**', 'internal/tool/desktop/**', 'go.mod', 'go.sum', '.github/workflows/capability-integration.yml']
 
 permissions:
   contents: read
@@ -34,3 +34,20 @@ jobs:
         run: |
           AGENTDOCK_TEST_GOPLS="$RUNNER_TEMP/agentdock-providers/gopls" \
             go test -race ./internal/semantic ./internal/jobrun ./internal/sourceproof -count=1 -timeout=3m -v
+
+  windows-owned-execution:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Native Job Object ownership and recovery
+        run: go test ./internal/process ./internal/jobrun ./internal/worktree ./internal/tool/command/session ./internal/tool/file -count=1 -timeout=3m -v
+      - name: Full 32-bit Windows binary contract compilation
+        run: |
+          $env:GOARCH = "386"
+          $env:CGO_ENABLED = "0"
+          go build -o "$env:RUNNER_TEMP/agentdock-windows-386.exe" ./cmd/agentdock

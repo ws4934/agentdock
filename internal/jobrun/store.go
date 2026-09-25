@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -202,6 +201,9 @@ func (s *Store) Start(ctx context.Context, requestID string, spec Spec, env []st
 		if err != nil {
 			return Record{}, err
 		}
+		if old.StateUnavailable {
+			return Record{}, errors.New("JOB_STATE_UNAVAILABLE: inspect the original receipt; execution is never replayed")
+		}
 		if old.DefinitionHash != definition {
 			return Record{}, errors.New("JOB_IDEMPOTENCY_CONFLICT: request_id already identifies a different execution")
 		}
@@ -225,23 +227,37 @@ func (s *Store) Start(ctx context.Context, requestID string, spec Spec, env []st
 	if len(records) >= 10000 {
 		return Record{}, errors.New("job history limit reached; administrative retention required")
 	}
-	if err = os.Mkdir(dir, 0700); err != nil {
+	// 完整的准入数据先写入不可见暂存目录，再原子发布；崩溃不留下半条公开记录。
+	stage, err := os.MkdirTemp(s.Root, ".admission-")
+	if err != nil {
 		return Record{}, err
 	}
-	if err = securepath.EnsurePrivate(dir); err != nil {
+	defer func() {
+		if stage != "" {
+			_ = os.RemoveAll(stage)
+		}
+	}()
+	if err = securepath.EnsurePrivate(stage); err != nil {
 		return Record{}, err
 	}
 	kind := "command"
 	if spec.Validation != nil {
 		kind = "validation"
 	}
-	record := Record{SchemaVersion: SchemaVersion, ID: id, DefinitionHash: definition, Title: spec.Title, Workdir: root, TaskID: spec.TaskID, Kind: kind, Status: "starting", CreatedAt: time.Now().UTC(), TimeoutMS: spec.TimeoutMS, ObservationOnly: true}
-	if err = writeJSON(filepath.Join(dir, "request.json"), spec); err != nil {
+	record := Record{SchemaVersion: SchemaVersion, ID: id, DefinitionHash: definition, Title: spec.Title, Workdir: root, TaskID: spec.TaskID, Kind: kind, Status: "starting", CreatedAt: time.Now().UTC(), TimeoutMS: spec.TimeoutMS, ObservationOnly: true, BootID: bootID()}
+	if err = writeJSON(filepath.Join(stage, "request.json"), spec); err != nil {
 		return Record{}, err
 	}
-	if err = writeJSON(filepath.Join(dir, "record.json"), record); err != nil {
+	if err = writeJSON(filepath.Join(stage, "record.json"), record); err != nil {
 		return Record{}, err
 	}
+	if err = writeJSON(filepath.Join(stage, "receipt.json"), record); err != nil {
+		return Record{}, err
+	}
+	if err = os.Rename(stage, dir); err != nil {
+		return Record{}, err
+	}
+	stage = ""
 	child := exec.Command(s.executable, "job-supervise", s.Root, id)
 	child.Env = environment
 	child.Dir = s.Root
@@ -266,12 +282,9 @@ func (s *Store) Status(id string) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
-	var r Record
-	if err = readJSON(filepath.Join(dir, "record.json"), &r); err != nil {
+	r, err := readRecordState(dir, id)
+	if err != nil {
 		return Record{}, err
-	}
-	if r.SchemaVersion != SchemaVersion || r.ID != id {
-		return Record{}, errors.New("unsupported or corrupt job record")
 	}
 	_, err = os.Stat(filepath.Join(dir, "cancel.request"))
 	r.CancellationRequested = err == nil
@@ -316,7 +329,8 @@ func (s *Store) records() ([]Record, error) {
 		}
 		r, err := s.Status(entry.Name())
 		if err != nil {
-			return nil, fmt.Errorf("invalid job state %s: %w", entry.Name(), err)
+			// 隔离损坏项，其他任务仍可查询和提交。未知项保守占一个名额，且列表明确不完整。
+			r = Record{SchemaVersion: SchemaVersion, ID: entry.Name(), Status: "state_unavailable", StateUnavailable: true, Failure: "job_state_unreadable; inspect this receipt without replay", ObservationOnly: true}
 		}
 		result = append(result, r)
 	}
@@ -337,7 +351,11 @@ func (s *Store) List(taskID string, limit int) ([]Record, bool, error) {
 		return nil, false, err
 	}
 	result := []Record{}
+	partial := false
 	for _, r := range all {
+		if r.StateUnavailable {
+			partial = true
+		}
 		if r.Archived || (taskID != "" && r.TaskID != taskID) {
 			continue
 		}
@@ -346,7 +364,7 @@ func (s *Store) List(taskID string, limit int) ([]Record, bool, error) {
 		}
 		result = append(result, r)
 	}
-	return result, false, nil
+	return result, partial, nil
 }
 func (s *Store) Cancel(id string) (Record, error) {
 	r, err := s.Status(id)
